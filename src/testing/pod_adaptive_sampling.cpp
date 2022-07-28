@@ -412,8 +412,10 @@ void AdaptiveSampling<dim, nstate>::configureParameterSpace() const
         parameter_names[1] = "angle_of_attack";
         parameter1_range.resize(2);
         parameter2_range.resize(2);
-        parameter1_range << 0.5, 0.9;
-        parameter2_range << 0, 4;
+        parameter1_range << this->all_parameters->reduced_order_param.mach_lower_bound, 
+                            this->all_parameters->reduced_order_param.mach_upper_bound;
+        parameter2_range << this->all_parameters->reduced_order_param.aoa_lower_bound,
+                            this->all_parameters->reduced_order_param.aoa_upper_bound;
         parameter2_range *= pi/180; //convert to radians
 
         int n_halton = 6;

@@ -19,6 +19,18 @@ public:
     /// Tolerance of the reduced-order nonlinear residual
     double reduced_residual_tolerance;
 
+    /// Lower bound of mach number for the apative sampling algorithm for the naca0012 case.
+    double mach_lower_bound;
+
+    /// Upper bound of mach number for the apative sampling algorithm for the naca0012 case.
+    double mach_upper_bound;
+
+    /// Lower bound of angle of attack for the apative sampling algorithm for the naca0012 case.
+    double aoa_lower_bound;
+
+    /// Upper bound of angle of attack for the apative sampling algorithm for the naca0012 case.
+    double aoa_upper_bound;
+
     ReducedOrderModelParam (); ///< Constructor
 
     /// Declares the possible variables and sets the defaults.
