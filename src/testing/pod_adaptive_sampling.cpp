@@ -31,7 +31,7 @@ AdaptiveSampling<dim, nstate>::AdaptiveSampling(const PHiLiP::Parameters::AllPar
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver = FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(all_parameters, parameter_handler);
     current_pod = std::make_shared<ProperOrthogonalDecomposition::OnlinePOD<dim>>(flow_solver->dg);
     nearest_neighbors = std::make_shared<ProperOrthogonalDecomposition::NearestNeighbors>();
-    tolerance = 1E-03;
+    tolerance = this->all_parameters.reduced_order_param.adaptation_tolerance;
 }
 
 template <int dim, int nstate>
