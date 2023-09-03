@@ -6,7 +6,8 @@ set(SOURCE
     pod_basis_offline.cpp
     halton.cpp
     nearest_neighbors.cpp
-    min_max_scaler.cpp)
+    min_max_scaler.cpp
+    rom_snapshots.cpp)
 
 foreach(dim RANGE 1 3)
     # Output library
