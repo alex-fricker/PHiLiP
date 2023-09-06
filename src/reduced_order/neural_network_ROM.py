@@ -13,8 +13,8 @@ class POD:
     def __init__(self, snapshots, parameters, n_modes=None):
         self.snapshots = snapshots
         self.parameters = parameters
-        self.n_modes = n_modes  # Leave as None to keep all singular values, or enter an positive int for a lower rank POD approximation
-
+        self.n_modes = n_modes  # Leave as None to keep all singular values, or enter an positive
+                                # int for a lower rank POD approximation
         self.ref_state = None
         self.POD_basis = None
         self.POD_coefficients = None
@@ -136,12 +136,15 @@ class PODNeuralNetworkROM:
         self.optimizer = None
         tc.manual_seed(0)
     
-    def initalize_network(self, architecture, learning_rate, weight_decay=1e-3):
+    def initalize_network(self, architecture, learning_rate, weight_decay):
         self.loss_function = nn.MSELoss()
         self.network = NeuralNetwork(outSize=self.POD.n_modes, arch=architecture)
-        self.optimizer = optim.Adam(self.network.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self.optimizer = optim.Adam(self.network.parameters(),
+                                    lr=learning_rate,
+                                    weight_decay=weight_decay)
 
-    def build_network(self, epochs, batch_size, print_plots=False):
+    def build_network(self, epochs, batch_size, print_plots):
+        print('Training neural network.')
         self.network.apply(self.reset_weights())
         dataset = SnapshotDataset(parameters=
                                   self.POD.parameters,
@@ -162,12 +165,30 @@ class PODNeuralNetworkROM:
             plt.title('Full dataset training losses')
             plt.legend(loc='upper right')
             plt.show()
+        print('Done training neural network.')
 
-    def k_fold_cross_validation(self, epochs, training_batch_size, testing_batch_size, number_splits, print_plots=False):
+    def evaluate_network(self, evaluation_points):
+        self.network.eval()
+        n_points = np.size(evaluation_points, axis=1)
+        rom_solutions = np.zeros((np.size(self.POD.snapshots, axis=0), n_points))
+        for i in range(n_points):
+            params = evaluation_points[:, i].reshape(-1)
+            print(f'Evaluating network at parameters: {params}')
+            params = tc.from_numpy(params)
+            coefficients = self.network(params.float())
+            coefficients = coefficients.cpu().detatch().numpy()
+            rom_solutions[:, i] = self.POD.inverse(coefficients)
+        print('Done evaluating.')
+        return rom_solutions
+
+    def k_fold_cross_validation(self, epochs, training_batch_size, testing_batch_size,
+                                number_splits, print_plots):
+        print("Running k-fold cross validation.")
         fold_training_losses = []
         fold_testing_losses = []
         kf = KFold(n_splits=number_splits, shuffle=True, random_state=0)
-        for fold, (training_ids, testing_ids) in enumerate(kf.split(X=self.POD.parameters, y=self.POD.coefficients)):
+        kf_enum = enumerate(kf.split(X=self.POD.parameters, y=self.POD.coefficients))
+        for fold, (training_ids, testing_ids) in kf_enum:
             self.network.apply(self.reset_weights())
             print(f'Fold number: {fold}')
             training_losses = []
@@ -209,6 +230,7 @@ class PODNeuralNetworkROM:
             plt.title('MSE Loss')
             plt.legend()
             fig1.show()
+        print('Done k-fold cross validation.')
 
     def train(self, train_loader, training_losses):
         self.network.train()
@@ -244,3 +266,51 @@ class PODNeuralNetworkROM:
         for layer in self.network.children():
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
+
+
+def run_neural_network_rom(snapshots_path,
+                           parameters_path,
+                           evaulation_points_path,
+                           n_modes=None,
+                           architecture=1,
+                           epochs=500,
+                           learning_rate=5e-3,
+                           training_batch_size=15,
+                           testing_batch_size=2,
+                           number_kf_splits=5,
+                           weight_decay=1e-3,
+                           solutions_save_name=None,
+                           run_network=True,
+                           run_k_fold_validation=False,
+                           print_plots=False):
+    snapshots_file = np.genfromtxt(snapshots_path, delimieter=" ")
+    parameters_file = np.genfromtxt(parameters_path, delimiter=" ")
+    evaluation_points = np.genfromtxt(evaulation_points_path, delimiter=" ")
+    if solutions_save_name is None:
+        solutions_save_name = f'{np.size(parameters_file, axis=1)}_nnrom_solutions.txt'
+
+    pod = POD(snapshots=snapshots_file, parameters=parameters_file, n_modes=n_modes)
+    pod.transform()
+    device = tc.device('cuda' if tc.cuda.is_available() else 'cpu')  # Uses cuda if available, otherwise uses cpu
+    rom = PODNeuralNetworkROM(POD=pod, device=device)
+    rom.initalize_network(architecture=architecture, learning_rate=learning_rate, weight_decay=weight_decay)
+
+    if run_k_fold_validation:
+        rom.k_fold_cross_validation(epochs=epochs,
+                                    training_batch_size=training_batch_size,
+                                    testing_batch_size=testing_batch_size,
+                                    number_splits=number_kf_splits,
+                                    print_plots=print_plots)
+
+    if run_network:
+        rom.build_network(epochs=epochs, batch_size=training_batch_size, print_plots=print_plots)
+        rom_solutions = rom.evaluate_network(evaluation_points=evaluation_points)
+        np.savetxt(solutions_save_name, rom_solutions, delimiter=" ")
+
+    return 0
+
+
+
+
+
+
