@@ -35,6 +35,7 @@ set(TESTS_SOURCE
     euler_entropy_conserving_split_forms_check.cpp
     homogeneous_isotropic_turbulence_initialization_check.cpp
     khi_robustness.cpp
+    neural_network_rom.cpp
     )
 
 foreach(dim RANGE 1 3)
@@ -43,6 +44,10 @@ foreach(dim RANGE 1 3)
     add_library(${TestsLib} STATIC ${TESTS_SOURCE})
     # Replace occurences of PHILIP_DIM with 1, 2, or 3 in the code
     target_compile_definitions(${TestsLib} PRIVATE PHILIP_DIM=${dim})
+
+    find_package(PythonLibs REQUIRED)
+    include_directories(${PYTHON_INCLUDE_DIRS})
+    target_link_libraries(${TestsLib} ${PYTHON_LIBRARIES})
 
     # Library dependency
     string(CONCAT GridsLib Grids_${dim}D)

@@ -22,22 +22,24 @@ public:
     ~ROMSnapshots() {};
 
     /// Method to build the snapshot matrix
-    void build_snapshot_matrix(const unsigned int n_snapshots);
+    void build_snapshot_matrix(const int n_snapshots);
 
     /// Update parameters for a new snapshot or FOM solution
     Parameters::AllParameters reinit_parameters(const Eigen::RowVectorXd &new_parameter) const;
 
-    dealii::LinearAlgebra::distributed::Vector<double> solve_snapshot_FOM(const Eigen::RowVectorXd& parameter) const;
+    dealii::LinearAlgebra::distributed::Vector<double> solve_snapshot_FOM(
+        const Eigen::RowVectorXd& parameter) const;
 
     /// POD basis
     std::shared_ptr<ProperOrthogonalDecomposition::OnlinePOD<dim>> pod;
 
+    /// Function to write the snapshot matrix and associated snapshot points to files
     void write_snapshot_data_to_file() const;
 
 private:
-    const Parameters::AllParameters *const all_parameters;
+    const Parameters::AllParameters *const all_parameters;  ///< Pointer to all parameters
     const dealii::ParameterHandler &parameter_handler;   ///< Dummy parameter handler because flowsolver requires it
-    unsigned int n_snapshots;  ///< Number of snapshot to be created
+    int n_snapshots;  ///< Number of snapshot to be created
     Eigen::MatrixXd snapshot_points;  ///< Parameters where each snapshot will be evaluated
     const int mpi_rank; ///< MPI rank.
     dealii::ConditionalOStream pcout;  ///< Used as std::cout, but only prints if mpi_rank == 0

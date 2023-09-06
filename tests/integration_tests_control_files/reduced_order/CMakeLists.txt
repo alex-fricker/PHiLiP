@@ -109,3 +109,13 @@ add_test(
         COMMAND mpirun -np 1 ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_1D -i ${CMAKE_CURRENT_BINARY_DIR}/1d_burgers_rewienski_manufactured.prm
         WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
 )
+
+# =======================================
+# Inviscid NACA0012 Neural Network
+# =======================================
+configure_file(inviscid_naca0012_neural_network.prm inviscid_naca0012_neural_network.prm COPYONLY)
+add_test(
+        NAME INVISCID_NACA0012_NEURAL_NETWORK_ROM
+        COMMAND mpirun -np ${MPIMAX} ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_2D -i ${CMAKE_CURRENT_BINARY_DIR}/inviscid_naca0012_neural_network.prm
+        WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
+)
