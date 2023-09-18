@@ -35,20 +35,25 @@ ROMSnapshots<dim, nstate>::ROMSnapshots(
 }
 
 template <int dim, int nstate>
-void ROMSnapshots<dim, nstate>::write_snapshot_data_to_file() const
+std::vector<std::string> ROMSnapshots<dim, nstate>::write_snapshot_data_to_file(std::string const &save_name) const
 {
-    std::ofstream snapshot_matrix_file(std::to_string(n_snapshots) + "_snapshot_matrix.txt");
+    std::string snapshots_path = save_name + "_matrix.txt";
+    std::string parameters_path = save_name + "_points.txt";
+    std::vector<std::string> pathnames = {save_name + "_matrix.txt", save_name + "_points.txt"};
+
+    std::ofstream snapshot_matrix_file(snapshots_path);
     unsigned int precision = 16;
     pod->dealiiSnapshotMatrix.print_formatted(snapshot_matrix_file, precision);
     snapshot_matrix_file.close();
 
     const static Eigen::IOFormat csv_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-    std::ofstream snapshots_points_file(std::to_string(n_snapshots) + "_snapshot_points.txt");
+    std::ofstream snapshots_points_file(parameters_path);
     if (snapshots_points_file.is_open())
     {
         snapshots_points_file << snapshot_points.format(csv_format);
         snapshots_points_file.close();
     }
+    return pathnames;
 }
 
 template <int dim, int nstate>

@@ -5,6 +5,7 @@
 #include "parameters/all_parameters.h"
 #include <deal.II/numerics/vector_tools.h>
 #include "pod_basis_online.h"
+#include <string>
 
 
 namespace PHiLiP {
@@ -34,7 +35,7 @@ public:
     std::shared_ptr<ProperOrthogonalDecomposition::OnlinePOD<dim>> pod;
 
     /// Function to write the snapshot matrix and associated snapshot points to files
-    void write_snapshot_data_to_file() const;
+    std::vector<std::string> write_snapshot_data_to_file(std::string const &save_name) const;
 
 private:
     const Parameters::AllParameters *const all_parameters;  ///< Pointer to all parameters

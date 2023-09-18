@@ -34,6 +34,22 @@ public:
     /// Maximum value of parameters
     std::vector<double> parameter_max_values;
 
+    /// Neural network ROM parameters ///
+
+    bool run_k_fold_cross_validation;  ///< Option to run k-fold cross validation
+    bool print_plots;  ///< Option to print the error and training plots
+    int num_pod_modes;  ///< Number of POD modes to use
+    int architecture;  ///< Neural network architecture to use
+    int epochs;  ///< Number of epochs for training
+    double learning_rate;  ///< Learning rate for training
+    int training_batch_size;  ///< Batch size for training
+    int testing_batch_size;  ///< Batch size for testing if doing k-fold cross validation
+    double weight_decay;  ///< Adds a penalty to the L2 norm of the weights in the loss function
+    int num_kf_splits;  ///< Number of split if doing k-fold cross validation
+
+
+    /// Option to print the plots when running the NNROM
+
     ReducedOrderModelParam (); ///< Constructor
 
     /// Declares the possible variables and sets the defaults.
