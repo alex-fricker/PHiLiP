@@ -37,6 +37,9 @@ public:
     /// Function to write the snapshot matrix and associated snapshot points to files
     std::vector<std::string> write_snapshot_data_to_file(std::string const &save_name) const;
 
+    /// Gets the snapshot names
+    std::vector<std::string> get_pathnames(std::string const &save_name) const;
+
 private:
     const Parameters::AllParameters *const all_parameters;  ///< Pointer to all parameters
     const dealii::ParameterHandler &parameter_handler;   ///< Dummy parameter handler because flowsolver requires it
@@ -45,8 +48,10 @@ private:
     const int mpi_rank; ///< MPI rank.
     dealii::ConditionalOStream pcout;  ///< Used as std::cout, but only prints if mpi_rank == 0
 
+
     /// Selects the points in the parameters space to evaluate the snapshots at using a halton sequence
     Eigen::MatrixXd generate_snapshot_points_halton();
+
 
     
 

@@ -54,7 +54,7 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
                           dealii::Patterns::Integer(1, dealii::Patterns::Integer::max_int_value),
                           "Number of epochs to use in training the neural network.");
         prm.declare_entry("learning_rate", "5e-3",
-                          dealii::Patterns::Double(dealii::Patterns::Double::max_double_value, 
+                          dealii::Patterns::Double(dealii::Patterns::Double::min_double_value, 
                                                    dealii::Patterns::Double::max_double_value),
                           "Learning rate for the training of the neural network.");
         prm.declare_entry("training_batch_size", "15",
