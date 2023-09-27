@@ -63,4 +63,5 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
 }
 
 } // Parameters namespace
+
 } // PHiLiP namespace
