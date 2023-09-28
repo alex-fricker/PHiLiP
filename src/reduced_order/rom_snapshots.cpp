@@ -38,7 +38,7 @@ template <int dim, int nstate>
 std::vector<std::string> ROMSnapshots<dim, nstate>::get_pathnames(std::string const &save_name) const
 {
     std::string snapshots_path = save_name + "_matrix.txt";
-    std::string parameters_path = save_name + "_points.txt";
+    std::string parameters_path = save_name + "_parameters.txt";
     return std::vector<std::string> {snapshots_path, parameters_path};
 }
 
@@ -52,7 +52,7 @@ std::vector<std::string> ROMSnapshots<dim, nstate>::write_snapshot_data_to_file(
     pod->dealiiSnapshotMatrix.print_formatted(snapshots_matrix_file, precision);
     snapshots_matrix_file.close();
 
-    const static Eigen::IOFormat csv_format(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    const static Eigen::IOFormat csv_format(Eigen::FullPrecision, Eigen::DontAlignCols, "  ", "\n");
     std::ofstream snapshots_points_file(pathnames[1]);
     if (snapshots_points_file.is_open())
     {
@@ -74,26 +74,28 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
 {
     this->n_snapshots = n_snapshots;
     this-> n_params = this->all_parameters->reduced_order_param.parameter_names.size();
-    this->pcout << "Building snapshot matrix for "
+    this->pcout << "\nBuilding snapshot matrix for "
                 << n_snapshots
                 << " snapshots."
                 << std::endl;
 
     snapshots_residual_L2_norm.resize(n_snapshots);
     generate_snapshot_points_halton();
-    this->pcout << "Final snapshot points: ##############################\n" << snapshot_points << std::endl;
-
     for (int i = 0; i < n_snapshots; i++)
     {   
         Eigen::RowVectorXd snapshot_params = snapshot_points.col(i).transpose().segment(0, n_params);
-        this->pcout << "\n################## Snapshot parameters: " << snapshot_params << std::endl;
+        this->pcout << "\n###################################\nSolving FOM snapshot number " 
+                    << i + 1 
+                    << " of " 
+                    << n_snapshots 
+                    << "\n###################################\n"
+                    <<std::endl;
         std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> snapshot = solve_snapshot_FOM(snapshot_params);
         double residual_L2_norm = snapshot->dg->get_residual_l2norm();
         if (residual_L2_norm < all_parameters->ode_solver_param.nonlinear_steady_residual_tolerance)
         {
             pod->addSnapshot(snapshot->dg->solution);
             snapshots_residual_L2_norm(i) = snapshot->dg->get_residual_l2norm();
-            
         }
         else
         {
@@ -109,19 +111,9 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
 
 template <int dim, int nstate>
 std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>>
-ROMSnapshots<dim, nstate>::solve_snapshot_FOM(const Eigen::RowVectorXd& parameter) const{
-    this->pcout << "\n#################Solving FOM at:" << std::endl;
-    for (int i = 0; i < n_params; i++)
-    {
-        this->pcout << "\t" 
-                    << all_parameters->reduced_order_param.parameter_names[i] 
-                    << ": "
-                    << parameter(i)
-                    << std::endl;
-    }
-
+ROMSnapshots<dim, nstate>::solve_snapshot_FOM(const Eigen::RowVectorXd& parameter) const
+{
     Parameters::AllParameters params = reinit_parameters(parameter);
-
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver =
         FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(&params, parameter_handler);
 
@@ -135,18 +127,15 @@ ROMSnapshots<dim, nstate>::solve_snapshot_FOM(const Eigen::RowVectorXd& paramete
     flow_solver->ode_solver->allocate_ode_system();
     flow_solver->run();
 
-    this->pcout << "\n#################Done solving FOM.\n" << std::endl;
+    dealii::LinearAlgebra::distributed::Vector<double> solution = flow_solver->dg->solution;
+    this->pcout << "SOLUTION SIZE" << solution.size() << std::endl;
+
     return flow_solver;
 }
 
 template <int dim, int nstate>
 void ROMSnapshots<dim, nstate>::generate_snapshot_points_halton()
 {
-    this->pcout << "\n\n\n\n###################################"
-                << "\nGENERATING HALTON\n"
-                << "###################################\n\n\n\n"
-                << std::endl;
-
     snapshot_points.resize(n_params, n_snapshots);
     const double pi = atan(1.0) * 4.0;
 
@@ -157,7 +146,6 @@ void ROMSnapshots<dim, nstate>::generate_snapshot_points_halton()
 
         for (int j = 0; j < n_params; j++)
         {
-            this->pcout << "raw halton sequence value: " << halton_seq_value[j] << std::endl;
             snapshot_points(j, i-1) =
                 halton_seq_value[j] * (this->all_parameters->reduced_order_param.parameter_max_values[j] - 
                                         this->all_parameters->reduced_order_param.parameter_min_values[j]) +
@@ -167,23 +155,15 @@ void ROMSnapshots<dim, nstate>::generate_snapshot_points_halton()
             {
                 snapshot_points(j, i-1) *= pi / 180;  // Convert parameter to radians
             }
-            this->pcout << "scaled halton sequence value: " << snapshot_points(j, i-1) << std::endl;
         }
     }
     delete [] halton_seq_value;
-    this->pcout << "\n\n\n\n###################################"
-                << "\nDONE GENERATING HALTON\n"
-                << "###################################\n\n\n\n"
-                << std::endl;
 }
 
 template <int dim, int nstate>
 Parameters::AllParameters ROMSnapshots<dim, nstate>::reinit_parameters(
     const Eigen::RowVectorXd &new_parameter) const
 {
-
-    this->pcout << "############ STARTING REINIT PARAMS ##############" << std::endl;
-
     // Copy all parameters
     PHiLiP::Parameters::AllParameters updated_parameters = *(this->all_parameters);
 
@@ -219,20 +199,15 @@ Parameters::AllParameters ROMSnapshots<dim, nstate>::reinit_parameters(
         {
             if (this->all_parameters->reduced_order_param.parameter_names[0] == "mach")
             {
-                this->pcout << "########### reinit parameters mach inf " << new_parameter(0);
                 updated_parameters.euler_param.mach_inf = new_parameter(0);
             }
             else if (this->all_parameters->reduced_order_param.parameter_names[0] == "alpha")
             {
-                this->pcout << "############### reinit parameters alpha (radians): " << new_parameter(0);
                 updated_parameters.euler_param.angle_of_attack = new_parameter(0); //radians!
             }
         }
         else if (this->all_parameters->reduced_order_param.parameter_names.size() == 2)
         {
-            this->pcout << "########### reinit parameters mach inf " << new_parameter(0);
-            this->pcout << "############### reinit parameters alpha (radians): " << new_parameter(1);
-
             updated_parameters.euler_param.mach_inf = new_parameter(0);
             updated_parameters.euler_param.angle_of_attack = new_parameter(1); //radians!
         }
@@ -263,9 +238,6 @@ Parameters::AllParameters ROMSnapshots<dim, nstate>::reinit_parameters(
                     << std::endl;
         std::abort();
     }
-
-    this->pcout << "############ DONE REINIT PARAMS ##############" << std::endl;
-
     return updated_parameters;
 }
 

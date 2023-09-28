@@ -26,7 +26,7 @@ class POD:
 
     def transform(self):
         self.scale_parameters()
-        self.ref_state = np.mean(self.snapshots, axis=1)
+        self.ref_state = np.mean(self.snapshots, axis=1).reshape(-1, 1)
         centered = self.snapshots - self.ref_state
         U, S, V = linalg.svd(centered, full_matrices=False)
         V = V.T  # To make computations clear, linalg.svd already returns transpose(V)
@@ -49,7 +49,7 @@ class SnapshotDataset(Dataset):
         self.device = device
 
     def __len__(self):
-        return np.size(self.parameters, axis=0)
+        return np.size(self.parameters, axis=1)
 
     def __getitem__(self, item):
         inputs = tc.from_numpy(self.parameters[: item])
@@ -132,7 +132,7 @@ class PODNeuralNetworkROM:
                  snapshots_path,
                  parameters_path,
                  num_pod_modes=0,
-                 solutions_save_name=None):
+                 solution_path=None):
 
         self.loss_function = None
         self.network = None
@@ -143,16 +143,28 @@ class PODNeuralNetworkROM:
         self.device = tc.device('cuda' if tc.cuda.is_available() else 'cpu')
         tc.manual_seed(0)
 
-        snapshots_file = np.genfromtxt(snapshots_path, delimiter=" ")
-        parameters_file = np.genfromtxt(parameters_path, delimiter=" ")
+        snapshots_file = []
+        parameters_file = []
+        with open(snapshots_path) as file:
+            for line in file:
+                snapshots_file.append([float(x) for x in line.strip().split()])
+        file.close()
+        snapshots_file = np.array(snapshots_file)
+
+        with open(parameters_path) as file:
+            for line in file:
+                parameters_file.append([float(x) for x in line.strip().split()])
+        file.close()
+        parameters_file = np.array(parameters_file)
+
         self.POD = POD(snapshots=snapshots_file, parameters=parameters_file,
                        num_pod_modes=num_pod_modes)
         self.POD.transform()
 
-        if solutions_save_name is None:
-            self.solutions_save_name = f'{np.size(parameters_file, axis=1)}_nnrom_solutions.txt'
+        if solution_path is None:
+            self.solution_path = "pod_nnrom_solution.txt"
         else:
-            self.solutions_save_name = solutions_save_name
+            self.solution_path = solution_path
 
     def initialize_network(self,
                            architecture=1,
@@ -170,9 +182,8 @@ class PODNeuralNetworkROM:
 
     def build_network(self, print_plots):
         print('Training neural network.')
-        self.network.apply(self.reset_weights())
-        dataset = SnapshotDataset(parameters=
-                                  self.POD.parameters,
+        self.network.apply(self.reset_weights)
+        dataset = SnapshotDataset(parameters=self.POD.parameters,
                                   targets=self.POD.POD_coefficients,
                                   device=self.device)
         dataset_loader = DataLoader(dataset, batch_size=self.training_batch_size, shuffle=True)
@@ -192,28 +203,15 @@ class PODNeuralNetworkROM:
             plt.show()
         print('Done training neural network.')
 
-    def evaluate_network(self, evaluation_points_path):
-        if type(evaluation_points_path) == str:
-            evaluation_points = np.genfromtxt(evaluation_points_path, delimiter=" ")
-        elif type(evaluation_points_path) == np.ndarray:
-            evaluation_points = evaluation_points_path
-        else:
-            print("Invalid value for evaluation points. Enter a path to a file containing the points"
-                  " or an ndarray of points")
-            exit(1)
-
+    def evaluate_network(self, parameters):
         self.network.eval()
-        n_points = np.size(evaluation_points, axis=1)
-        rom_solutions = np.zeros((np.size(self.POD.snapshots, axis=0), n_points))
-        for i in range(n_points):
-            params = evaluation_points[:, i].reshape(-1)
-            print(f'Evaluating network at parameters: {params}')
-            params = tc.from_numpy(params)
-            coefficients = self.network(params.float())
-            coefficients = coefficients.cpu().detatch().numpy()
-            rom_solutions[:, i] = self.POD.inverse(coefficients)
-        print('Done evaluating.')
-        return rom_solutions
+        params = parameters.reshape(-1)
+        params = tc.from_numpy(params)
+        coefficients = self.network(params.float())
+        coefficients = coefficients.cpu().detatch().numpy()
+        rom_solution = self.POD.inverse(coefficients)
+        np.savetxt(self.solution_path, rom_solution, delimiter="  ")
+        return rom_solution
 
     def k_fold_cross_validation(self, testing_batch_size, number_splits, print_plots=False):
         print("Running k-fold cross validation.")
@@ -222,7 +220,7 @@ class PODNeuralNetworkROM:
         kf = KFold(n_splits=number_splits, shuffle=True, random_state=0)
         kf_enum = enumerate(kf.split(X=self.POD.parameters, y=self.POD.coefficients))
         for fold, (training_ids, testing_ids) in kf_enum:
-            self.network.apply(self.reset_weights())
+            self.network.apply(self.reset_weights)
             print(f'Fold number: {fold}')
             training_losses = []
             testing_losses = []
@@ -296,30 +294,51 @@ class PODNeuralNetworkROM:
         testing_losses.append(current_loss)
         return testing_losses
 
-    def reset_weights(self):
+    @staticmethod
+    def reset_weights(network):
         # Used to reset model weights to avoid weight leakage in between folds
-        for layer in self.network.children():
+        for layer in network.children():
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
 
 
 if __name__ == "__main__":
-    snapshots_path = "/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" + "training_snapshot_matrix.txt"
-    parameters_path = "/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" + "training_snapshot_points.txt"
-    testing_points_path = "/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" + "testing_snapshot_points.txt"
-    testing_snapshots_path = "/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" + "testing_snapshot_matrix.txt"
+    snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+                      "25_snapshots_training_matrix.txt")
+    parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+                       "25_snapshots_training_parameters.txt")
+    testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+                           "5_snapshots_testing_parameters.txt")
+    testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
+                              + "5_snapshots_testing_matrix.txt")
+
+    testing_matrix = []
+    testing_parameters = []
+    with open(testing_snapshots_path) as file:
+        for line in file:
+            testing_matrix.append([float(x) for x in line.strip().split()])
+        file.close()
+    testing_matrix = np.array(testing_matrix)
+
+    with open(testing_points_path) as file:
+        for line in file:
+            testing_parameters.append([float(x) for x in line.strip().split()])
+        file.close()
+    testing_parameters = np.array(testing_parameters)
+
     num_pod_modes = 0
     architecture = 1
     epochs = 500
     learning_rate = 5e-3
-    training_batch_size = 15
+    training_batch_size = 2
 
     ROM = PODNeuralNetworkROM(snapshots_path, parameters_path, num_pod_modes)
-    ROM.initalize_network(architecture, epochs, learning_rate, training_batch_size)
+    ROM.initialize_network(architecture, epochs, learning_rate, training_batch_size)
     ROM.build_network(print_plots=True)
-    rom_solution = ROM.evaluate_network(testing_points_path)
-    fom_solution = np.genfromtxt(testing_snapshots_path, delimiter=" ")
-    L2_error = np.linalg.norm(fom_solution - rom_solution, axis=1)
-    print(L2_error)
-    print("Done.")
 
+    for i in range(np.size(testing_parameters, axis=1)):
+        rom_solution = ROM.evaluate_network(testing_parameters[:, i])
+        L2_error = np.linalg.norm(rom_solution - testing_matrix[:, i])
+        print(f'L2 error for parameters {testing_parameters[:, i]}: {L2_error}')
+
+    print("Done.")
