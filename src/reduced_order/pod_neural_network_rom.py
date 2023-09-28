@@ -143,7 +143,7 @@ class PODNeuralNetworkROM:
         self.device = tc.device('cuda' if tc.cuda.is_available() else 'cpu')
         tc.manual_seed(0)
 
-        snapshots_file = np.genfromtxt(snapshots_path, delimieter=" ")
+        snapshots_file = np.genfromtxt(snapshots_path, delimiter=" ")
         parameters_file = np.genfromtxt(parameters_path, delimiter=" ")
         self.POD = POD(snapshots=snapshots_file, parameters=parameters_file,
                        num_pod_modes=num_pod_modes)
@@ -301,3 +301,25 @@ class PODNeuralNetworkROM:
         for layer in self.network.children():
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
+
+
+if __name__ == "__main__":
+    snapshots_path = "/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" + "training_snapshot_matrix.txt"
+    parameters_path = "/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" + "training_snapshot_points.txt"
+    testing_points_path = "/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" + "testing_snapshot_points.txt"
+    testing_snapshots_path = "/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" + "testing_snapshot_matrix.txt"
+    num_pod_modes = 0
+    architecture = 1
+    epochs = 500
+    learning_rate = 5e-3
+    training_batch_size = 15
+
+    ROM = PODNeuralNetworkROM(snapshots_path, parameters_path, num_pod_modes)
+    ROM.initalize_network(architecture, epochs, learning_rate, training_batch_size)
+    ROM.build_network(print_plots=True)
+    rom_solution = ROM.evaluate_network(testing_points_path)
+    fom_solution = np.genfromtxt(testing_snapshots_path, delimiter=" ")
+    L2_error = np.linalg.norm(fom_solution - rom_solution, axis=1)
+    print(L2_error)
+    print("Done.")
+

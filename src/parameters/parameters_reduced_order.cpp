@@ -70,7 +70,15 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("num_kf_splits", "5",
                           dealii::Patterns::Integer(2, dealii::Patterns::Integer::max_int_value),
                           "Number of splits to make if doing k-fold cross validation.");
-
+        prm.declare_entry("recompute_training_snapshot_matrix", "true",
+                          dealii::Patterns::Bool(),
+                          "Option to recompute the training snapshot matrix or to use an existing one.");
+        prm.declare_entry("recompute_testing_snapshot_matrix", "true",
+                          dealii::Patterns::Bool(),
+                          "Option to recompute the testing snapshot matrix or to use an existing one.");
+        prm.declare_entry("num_evaluation_points", "1",
+                          dealii::Patterns::Integer(1, dealii::Patterns::Integer::max_int_value),
+                          "Number of points to test the neural network rom at.");
     }
     prm.leave_subsection();
 }
@@ -111,6 +119,9 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
         testing_batch_size = prm.get_integer("testing_batch_size");
         weight_decay = prm.get_double("weight_decay");
         num_kf_splits = prm.get_integer("num_kf_splits");
+        recompute_training_snapshot_matrix = prm.get_bool("recompute_training_snapshot_matrix");
+        recompute_testing_snapshot_matrix = prm.get_bool("recompute_testing_snapshot_matrix");
+        num_evaluation_points = prm.get_integer("num_evaluation_points");
     }
     prm.leave_subsection();
 }

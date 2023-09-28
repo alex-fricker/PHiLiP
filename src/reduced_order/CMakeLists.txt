@@ -1,3 +1,5 @@
+configure_file(pod_neural_network_rom.py ../../tests/integration_tests_control_files/reduced_order/pod_neural_network_rom.py COPYONLY)
+
 set(SOURCE
     rbf_interpolation.cpp
     pod_basis_online.cpp

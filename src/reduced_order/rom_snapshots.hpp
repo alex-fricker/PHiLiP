@@ -6,6 +6,7 @@
 #include <deal.II/numerics/vector_tools.h>
 #include "pod_basis_online.h"
 #include <string>
+#include "../flow_solver/flow_solver.h"
 
 
 namespace PHiLiP {
@@ -28,7 +29,7 @@ public:
     /// Update parameters for a new snapshot or FOM solution
     Parameters::AllParameters reinit_parameters(const Eigen::RowVectorXd &new_parameter) const;
 
-    dealii::LinearAlgebra::distributed::Vector<double> solve_snapshot_FOM(
+    std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> solve_snapshot_FOM(
         const Eigen::RowVectorXd& parameter) const;
 
     /// POD basis
@@ -44,13 +45,15 @@ private:
     const Parameters::AllParameters *const all_parameters;  ///< Pointer to all parameters
     const dealii::ParameterHandler &parameter_handler;   ///< Dummy parameter handler because flowsolver requires it
     int n_snapshots;  ///< Number of snapshot to be created
+    int n_params;  ///< Number of parameters
     Eigen::MatrixXd snapshot_points;  ///< Parameters where each snapshot will be evaluated
+    Eigen::RowVectorXd snapshots_residual_L2_norm;  ///< L2 norm of each snapshot in the matrix
     const int mpi_rank; ///< MPI rank.
     dealii::ConditionalOStream pcout;  ///< Used as std::cout, but only prints if mpi_rank == 0
 
 
     /// Selects the points in the parameters space to evaluate the snapshots at using a halton sequence
-    Eigen::MatrixXd generate_snapshot_points_halton();
+    void generate_snapshot_points_halton();
 
 
     

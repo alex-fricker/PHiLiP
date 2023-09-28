@@ -46,6 +46,9 @@ public:
     int testing_batch_size;  ///< Batch size for testing if doing k-fold cross validation
     double weight_decay;  ///< Adds a penalty to the L2 norm of the weights in the loss function
     int num_kf_splits;  ///< Number of split if doing k-fold cross validation
+    bool recompute_training_snapshot_matrix;  ///< Recompute or use existing training matrix
+    bool recompute_testing_snapshot_matrix;  ///< Recompute or use existing testing matrix
+    int num_evaluation_points;  ///< Number of points to test the rom at
 
 
     /// Option to print the plots when running the NNROM
