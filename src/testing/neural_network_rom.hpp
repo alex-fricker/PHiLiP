@@ -1,8 +1,8 @@
 #ifndef __NEURAL_NETWORK_ROM__
 #define __NEURAL_NETWORK_ROM__
 
-
 #include "tests.h"
+#include <eigen/Eigen/Dense>
 
 namespace PHiLiP {
 namespace Tests {
@@ -22,8 +22,9 @@ public:
     int run_test() const;
 
 private:
-    /// Parameter handler for storing the .prm file being ran
-    const dealii::ParameterHandler &parameter_handler;
+    const dealii::ParameterHandler &parameter_handler;  ///< Parameter handler for storing the .prm file being ran
+    Eigen::MatrixXd testing_parameters;  ///< Parameters for testing the network
+    Eigen::MatrixXd testing_snapshots;  ///< Snapshot for testing the network
 };
 
 }  ///< Tests namespace

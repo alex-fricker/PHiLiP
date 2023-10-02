@@ -7,6 +7,7 @@ from sklearn.model_selection import KFold
 from scipy import linalg
 from sklearn import preprocessing
 import matplotlib.pyplot as plt
+import os
 
 
 class POD:
@@ -37,9 +38,11 @@ class POD:
 
         self.POD_coefficients = np.diag(S) @ V.T
         self.POD_basis = U
+        plt.plot(range(len(S)), S)
+        plt.show()
 
     def inverse(self, coeffs):
-        return self.POD_basis @ coeffs + self.ref_state
+        return (self.POD_basis @ coeffs).reshape(-1, 1) + self.ref_state
 
 
 class SnapshotDataset(Dataset):
@@ -49,12 +52,15 @@ class SnapshotDataset(Dataset):
         self.device = device
 
     def __len__(self):
-        return np.size(self.parameters, axis=1)
+        L = np.size(self.parameters, axis=1)
+        return L
 
     def __getitem__(self, item):
-        inputs = tc.from_numpy(self.parameters[: item])
-        targets = tc.from_numpy(self.targets[: item])
-        return inputs.to(self.device), targets.to(self.device)
+        inputs = tc.from_numpy(self.parameters[:, item])
+        targets = tc.from_numpy(self.targets[:, item])
+        inputs = inputs.to(self.device)
+        targets = targets.to(self.device)
+        return inputs, targets
 
 
 class NeuralNetwork(nn.Module):
@@ -62,11 +68,7 @@ class NeuralNetwork(nn.Module):
         super(NeuralNetwork, self).__init__()
         self.outSize = outSize
         self.arch = arch
-        self.arch0 = nn.Sequential(
-            nn.Linear(2, 50),
-            nn.Sigmoid(),
-            nn.Linear(50, self.outSize)
-        )
+
         self.arch1 = nn.Sequential(
             nn.Linear(2, 25),
             nn.PReLU(),
@@ -78,39 +80,17 @@ class NeuralNetwork(nn.Module):
             nn.PReLU(),
             nn.Linear(50, self.outSize)
         )
+
         self.arch2 = nn.Sequential(
-            nn.Linear(2, 16),
+            nn.Linear(2, 500),
             nn.PReLU(),
-            nn.Linear(16, 32),
+            nn.Linear(500, 1000),
             nn.PReLU(),
-            nn.Linear(32, 32),
+            nn.Linear(1000, 1000),
             nn.PReLU(),
-            nn.Linear(32, self.outSize)
-        )
-        self.arch3 = nn.Sequential(
-            nn.Linear(2, 16),
+            nn.Linear(1000, 500),
             nn.PReLU(),
-            nn.Linear(16, 16),
-            nn.PReLU(),
-            nn.Linear(16, 32),
-            nn.PReLU(),
-            nn.Linear(32, self.outSize)
-        )
-        self.arch4 = nn.Sequential(
-            nn.Linear(2, 16),
-            nn.PReLU(),
-            nn.Linear(16, 16),
-            nn.PReLU(),
-            nn.Linear(16, 16),
-            nn.PReLU(),
-            nn.Linear(16, self.outSize)
-        )
-        self.arch5 = nn.Sequential(
-            nn.Linear(2, 32),
-            nn.PReLU(),
-            nn.Linear(32, 32),
-            nn.PReLU(),
-            nn.Linear(32, self.outSize)
+            nn.Linear(500, self.outSize)
         )
 
     def forward(self, x):
@@ -162,7 +142,7 @@ class PODNeuralNetworkROM:
         self.POD.transform()
 
         if solution_path is None:
-            self.solution_path = "pod_nnrom_solution.txt"
+            self.solution_path = os.path.join(os.getcwd(), "pod_nnrom_solution.txt")
         else:
             self.solution_path = solution_path
 
@@ -188,29 +168,48 @@ class PODNeuralNetworkROM:
                                   device=self.device)
         dataset_loader = DataLoader(dataset, batch_size=self.training_batch_size, shuffle=True)
         training_losses = []
+        loss = 1
 
-        for epoch in range(1, self.epochs + 1):
+        epoch = 1
+        trainint_tol = 1e-3
+        while epoch < self.epochs and loss > trainint_tol:
             training_losses = self.train(train_loader=dataset_loader, training_losses=training_losses)
+            if not epoch % 100:
+                print(f'\tEpoch number: {epoch}, current loss: {training_losses[-1]}')
+            loss = training_losses[-1]
+            epoch += 1
 
         if print_plots:
-            plt.plot(np.arange(0, self.epochs),
+            plt.plot(np.arange(0, epoch-1),
                      training_losses,
                      label=f'Training, final iteration loss: {training_losses[-1]:.4f}')
             plt.xlabel('Epochs')
             plt.ylabel('Loss')
             plt.title('Full dataset training losses')
+            plt.yscale('log')
             plt.legend(loc='upper right')
             plt.show()
         print('Done training neural network.')
 
     def evaluate_network(self, parameters):
         self.network.eval()
-        params = parameters.reshape(-1)
+        params = np.array(parameters).reshape(-1)
         params = tc.from_numpy(params)
+        print('predicing coeffs')
         coefficients = self.network(params.float())
-        coefficients = coefficients.cpu().detatch().numpy()
+        coefficients = coefficients.cpu().detach().numpy()
+        print('computing inverse')
         rom_solution = self.POD.inverse(coefficients)
-        np.savetxt(self.solution_path, rom_solution, delimiter="  ")
+        print('saving file')
+
+        if os.path.exists(self.solution_path):
+            os.remove(self.solution_path)
+
+        with open(self.solution_path, 'w', newline="\n") as file:
+            for line in range(len(rom_solution)):
+                file.write(str(rom_solution[line, 0]) + "\n")
+            file.close()
+        print('done evaluating network')
         return rom_solution
 
     def k_fold_cross_validation(self, testing_batch_size, number_splits, print_plots=False):
@@ -326,18 +325,22 @@ if __name__ == "__main__":
         file.close()
     testing_parameters = np.array(testing_parameters)
 
-    num_pod_modes = 0
-    architecture = 1
-    epochs = 500
+    num_pod_modes = 1
+    architecture = 2
+    epochs = 10
     learning_rate = 5e-3
-    training_batch_size = 2
+    training_batch_size = 15
 
     ROM = PODNeuralNetworkROM(snapshots_path, parameters_path, num_pod_modes)
     ROM.initialize_network(architecture, epochs, learning_rate, training_batch_size)
     ROM.build_network(print_plots=True)
 
+    testing_POD = POD(snapshots=testing_matrix, parameters=testing_parameters)
+    testing_POD.scale_parameters()
+
     for i in range(np.size(testing_parameters, axis=1)):
-        rom_solution = ROM.evaluate_network(testing_parameters[:, i])
+        params = [testing_POD.parameters[0, i], testing_POD.parameters[1, i]]
+        rom_solution = ROM.evaluate_network(params)
         L2_error = np.linalg.norm(rom_solution - testing_matrix[:, i])
         print(f'L2 error for parameters {testing_parameters[:, i]}: {L2_error}')
 

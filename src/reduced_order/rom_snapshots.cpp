@@ -110,6 +110,14 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
 }
 
 template <int dim, int nstate>
+Eigen::MatrixXd ROMSnapshots<dim, nstate>::get_halton_points(const int &n_points)
+{
+    this->n_snapshots = n_points;
+    generate_snapshot_points_halton();
+    return snapshot_points;
+}
+
+template <int dim, int nstate>
 std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>>
 ROMSnapshots<dim, nstate>::solve_snapshot_FOM(const Eigen::RowVectorXd& parameter) const
 {

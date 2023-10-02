@@ -41,6 +41,9 @@ public:
     /// Gets the snapshot names
     std::vector<std::string> get_pathnames(std::string const &save_name) const;
 
+    /// Get the a Halton sequence of parameters
+    Eigen::MatrixXd get_halton_points(const int &n_points);
+
 private:
     const Parameters::AllParameters *const all_parameters;  ///< Pointer to all parameters
     const dealii::ParameterHandler &parameter_handler;   ///< Dummy parameter handler because flowsolver requires it

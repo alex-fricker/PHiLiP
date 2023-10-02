@@ -2,7 +2,6 @@
 #include <iostream>
 #include <filesystem>
 #include "parameters/all_parameters.h"
-#include <eigen/Eigen/Dense>
 #include "reduced_order/rom_snapshots.hpp"
 #include "/usr/include/python3.8/Python.h"
 #include <string>
