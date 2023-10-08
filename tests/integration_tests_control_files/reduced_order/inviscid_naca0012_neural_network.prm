@@ -61,6 +61,10 @@ subsection reduced order
   set parameter_max_values = 0.3, 5
   set num_halton = 25
 end
+
+subsection functional
+  set functional_type = lift
+end
   
 subsection Neural network
   set run_k_fold_cross_validation = false
@@ -72,6 +76,5 @@ subsection Neural network
   set training_batch_size = 15
   set testing_batch_size = 2
   set recompute_training_snapshot_matrix = false
-  set recompute_testing_snapshot_matrix = true
   set num_evaluation_points = 1
 end

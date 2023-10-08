@@ -27,7 +27,8 @@ public:
     void build_snapshot_matrix(const int n_snapshots);
 
     /// Update parameters for a new snapshot or FOM solution
-    Parameters::AllParameters reinit_parameters(const Eigen::RowVectorXd &new_parameter) const;
+    Parameters::AllParameters reinit_parameters(
+        const Eigen::RowVectorXd &new_parameter) const;
 
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> solve_snapshot_FOM(
         const Eigen::RowVectorXd& parameter) const;
@@ -57,10 +58,6 @@ private:
 
     /// Selects the points in the parameters space to evaluate the snapshots at using a halton sequence
     void generate_snapshot_points_halton();
-
-
-    
-
 };
 
 }  // POD namespace

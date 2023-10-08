@@ -32,6 +32,8 @@ ROMSnapshots<dim, nstate>::ROMSnapshots(
 
     system_matrix->copy_from(flow_solver->dg->system_matrix);
     pod = std::make_shared<ProperOrthogonalDecomposition::OnlinePOD<dim>>(system_matrix);
+
+    this-> n_params = this->all_parameters->reduced_order_param.parameter_names.size();
 }
 
 template <int dim, int nstate>
@@ -39,7 +41,8 @@ std::vector<std::string> ROMSnapshots<dim, nstate>::get_pathnames(std::string co
 {
     std::string snapshots_path = save_name + "_matrix.txt";
     std::string parameters_path = save_name + "_parameters.txt";
-    return std::vector<std::string> {snapshots_path, parameters_path};
+    std::string residuals_path = save_name + "residuals.txt";
+    return std::vector<std::string> {snapshots_path, parameters_path, residuals_path};
 }
 
 template <int dim, int nstate>
@@ -60,7 +63,7 @@ std::vector<std::string> ROMSnapshots<dim, nstate>::write_snapshot_data_to_file(
         snapshots_points_file.close();
     }
 
-    std::ofstream snapshots_residual_file(save_name + "_residual.txt");
+    std::ofstream snapshots_residual_file(pathnames[2]);
     if (snapshots_residual_file.is_open())
     {
         snapshots_residual_file << snapshots_residual_L2_norm.format(csv_format);
@@ -73,7 +76,6 @@ template <int dim, int nstate>
 void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
 {
     this->n_snapshots = n_snapshots;
-    this-> n_params = this->all_parameters->reduced_order_param.parameter_names.size();
     this->pcout << "\nBuilding snapshot matrix for "
                 << n_snapshots
                 << " snapshots."
@@ -134,10 +136,6 @@ ROMSnapshots<dim, nstate>::solve_snapshot_FOM(const Eigen::RowVectorXd& paramete
 
     flow_solver->ode_solver->allocate_ode_system();
     flow_solver->run();
-
-    dealii::LinearAlgebra::distributed::Vector<double> solution = flow_solver->dg->solution;
-    this->pcout << "SOLUTION SIZE" << solution.size() << std::endl;
-
     return flow_solver;
 }
 
@@ -197,8 +195,7 @@ Parameters::AllParameters ROMSnapshots<dim, nstate>::reinit_parameters(
             updated_parameters.burgers_param.rewienski_b = new_parameter(1);
         }
         else {
-            this->pcout << "Too many parameters specified for Burgers Rewienski snapshot case." 
-                        << std::endl;
+            pcout << "Too many parameters specified for Burgers Rewienski snapshot case." << std::endl;
         }
     }
     else if (flow_type == FlowCaseEnum::naca0012)
@@ -221,8 +218,7 @@ Parameters::AllParameters ROMSnapshots<dim, nstate>::reinit_parameters(
         }
         else 
         {
-            this->pcout << "Too many parameters specified for NACA0012 case." 
-                        << std::endl;
+            pcout << "Too many parameters specified for NACA0012 case." << std::endl;
         }
     }
     else if (flow_type == FlowCaseEnum::gaussian_bump)
@@ -236,14 +232,12 @@ Parameters::AllParameters ROMSnapshots<dim, nstate>::reinit_parameters(
         }
         else 
         {
-            this->pcout << "Too many parameters specified for Gaussian bump case." 
-                        << std::endl;
+            pcout << "Too many parameters specified for Gaussian bump case." << std::endl;
         }
     }
     else
     {
-        this->pcout << "Invalid flow case. You probably forgot to specify a flow case in the prm file." 
-                    << std::endl;
+        pcout << "Invalid flow case. You probably forgot to specify a flow case in the prm file." << std::endl;
         std::abort();
     }
     return updated_parameters;

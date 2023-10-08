@@ -111,6 +111,7 @@ class PODNeuralNetworkROM:
     def __init__(self,
                  snapshots_path,
                  parameters_path,
+                 residuals_path,
                  num_pod_modes=0,
                  solution_path=None):
 
@@ -121,10 +122,12 @@ class PODNeuralNetworkROM:
         self.training_batch_size = None
         self.testing_batch_size = None
         self.device = tc.device('cuda' if tc.cuda.is_available() else 'cpu')
+        self.solution_path = os.path.join(os.getcwd(), "pod_nnrom_solution.txt")
         tc.manual_seed(0)
 
         snapshots_file = []
         parameters_file = []
+        snapshot_residuals = np.genfromtxt(residuals_path, delimiter=",")
         with open(snapshots_path) as file:
             for line in file:
                 snapshots_file.append([float(x) for x in line.strip().split()])
@@ -137,14 +140,15 @@ class PODNeuralNetworkROM:
         file.close()
         parameters_file = np.array(parameters_file)
 
+        for i in range(0, len(snapshot_residuals)):
+            if snapshot_residuals[i] == -1:
+                parameters_file = np.delete(arr=parameters_file, obj=i, axis=1)
+                snapshots_file = np.delete(arr=snapshots_file, obj=i, axis=1)
+
         self.POD = POD(snapshots=snapshots_file, parameters=parameters_file,
                        num_pod_modes=num_pod_modes)
         self.POD.transform()
 
-        if solution_path is None:
-            self.solution_path = os.path.join(os.getcwd(), "pod_nnrom_solution.txt")
-        else:
-            self.solution_path = solution_path
 
     def initialize_network(self,
                            architecture=1,
@@ -304,6 +308,8 @@ class PODNeuralNetworkROM:
 if __name__ == "__main__":
     snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
                       "25_snapshots_training_matrix.txt")
+    residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+                      "25_snapshots_training_residuals.txt")
     parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
                        "25_snapshots_training_parameters.txt")
     testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
@@ -331,7 +337,7 @@ if __name__ == "__main__":
     learning_rate = 5e-3
     training_batch_size = 15
 
-    ROM = PODNeuralNetworkROM(snapshots_path, parameters_path, num_pod_modes)
+    ROM = PODNeuralNetworkROM(snapshots_path, parameters_path, residual_path, num_pod_modes)
     ROM.initialize_network(architecture, epochs, learning_rate, training_batch_size)
     ROM.build_network(print_plots=True)
 
