@@ -11,7 +11,7 @@ import os
 
 
 class POD:
-    def __init__(self, snapshots, parameters, num_pod_modes=None):
+    def __init__(self, snapshots, parameters, num_pod_modes):
         self.snapshots = snapshots
         self.parameters = parameters
         self.num_pod_modes = num_pod_modes  # Set to 0 to keep all singular values, or enter a
@@ -19,6 +19,8 @@ class POD:
         self.ref_state = None
         self.POD_basis = None
         self.POD_coefficients = None
+        self.sort_pattern = None
+        self.inverse_sort = None
 
     def scale_parameters(self):
         scaler = preprocessing.MinMaxScaler()
@@ -28,7 +30,13 @@ class POD:
     def transform(self):
         self.scale_parameters()
         self.ref_state = np.mean(self.snapshots, axis=1).reshape(-1, 1)
+        self.sort_pattern = np.argsort(self.ref_state, axis=0)
+        self.inverse_sort = np.argsort(self.sort_pattern, axis=0)
+        self.ref_state = self.ref_state[self.sort_pattern, 0]
+        for i in range(np.size(self.snapshots, axis=1)):
+            self.snapshots[:, i] = self.snapshots[:, i][self.sort_pattern.reshape(-1)]
         centered = self.snapshots - self.ref_state
+
         U, S, V = linalg.svd(centered, full_matrices=False)
         V = V.T  # To make computations clear, linalg.svd already returns transpose(V)
         if self.num_pod_modes != 0:
@@ -38,11 +46,13 @@ class POD:
 
         self.POD_coefficients = np.diag(S) @ V.T
         self.POD_basis = U
-        plt.plot(range(len(S)), S)
-        plt.show()
+        # plt.plot(range(len(S)), S)
+        # plt.show()
 
     def inverse(self, coeffs):
-        return (self.POD_basis @ coeffs).reshape(-1, 1) + self.ref_state
+        prediction = (self.POD_basis @ coeffs).reshape(-1, 1) + self.ref_state
+        prediction = prediction[self.inverse_sort, 0]
+        return prediction
 
 
 class SnapshotDataset(Dataset):
@@ -78,8 +88,7 @@ class NeuralNetwork(nn.Module):
             nn.PReLU(),
             nn.Linear(100, 50),
             nn.PReLU(),
-            nn.Linear(50, self.outSize)
-        )
+            nn.Linear(50, self.outSize))
 
         self.arch2 = nn.Sequential(
             nn.Linear(2, 500),
@@ -90,8 +99,36 @@ class NeuralNetwork(nn.Module):
             nn.PReLU(),
             nn.Linear(1000, 500),
             nn.PReLU(),
-            nn.Linear(500, self.outSize)
-        )
+            nn.Linear(500, self.outSize))
+
+        self.arch3 = nn.Sequential(
+            nn.Linear(2, 200),
+            nn.PReLU(),
+            nn.Linear(200, 500),
+            nn.PReLU(),
+            nn.Linear(500, 500),
+            nn.PReLU(),
+            nn.Linear(500, self.outSize))
+
+        self.arch4 = nn.Sequential(
+            nn.Linear(2, 75),
+            nn.PReLU(),
+            nn.Linear(75, 75),
+            nn.PReLU(),
+            nn.Linear(75, 75),
+            nn.PReLU(),
+            nn.Linear(75, 25),
+            nn.PReLU(),
+            nn.Linear(25, self.outSize))
+
+        self.arch5 = nn.Sequential(
+            nn.Linear(2, 75),
+            nn.PReLU(),
+            nn.Linear(75, 75),
+            nn.PReLU(),
+            nn.Linear(75, 25),
+            nn.PReLU(),
+            nn.Linear(25, self.outSize))
 
     def forward(self, x):
         if self.arch == 1:
@@ -112,9 +149,9 @@ class PODNeuralNetworkROM:
                  snapshots_path,
                  parameters_path,
                  residuals_path,
-                 num_pod_modes=0,
-                 solution_path=None):
-
+                 num_pod_modes,
+                 early_stopping_tol):
+        self.early_stopping_tol = early_stopping_tol
         self.loss_function = None
         self.network = None
         self.optimizer = None
@@ -127,7 +164,14 @@ class PODNeuralNetworkROM:
 
         snapshots_file = []
         parameters_file = []
-        snapshot_residuals = np.genfromtxt(residuals_path, delimiter=",")
+        snapshot_residuals = []
+
+        with open(residuals_path) as file:
+            for line in file:
+                snapshot_residuals.append([float(x) for x in line.strip().split()])
+        file.close()
+        snapshot_residuals = np.array(snapshot_residuals).reshape(-1)
+
         with open(snapshots_path) as file:
             for line in file:
                 snapshots_file.append([float(x) for x in line.strip().split()])
@@ -148,7 +192,6 @@ class PODNeuralNetworkROM:
         self.POD = POD(snapshots=snapshots_file, parameters=parameters_file,
                        num_pod_modes=num_pod_modes)
         self.POD.transform()
-
 
     def initialize_network(self,
                            architecture=1,
@@ -175,8 +218,7 @@ class PODNeuralNetworkROM:
         loss = 1
 
         epoch = 1
-        trainint_tol = 1e-3
-        while epoch < self.epochs and loss > trainint_tol:
+        while epoch < self.epochs and loss > self.early_stopping_tol:
             training_losses = self.train(train_loader=dataset_loader, training_losses=training_losses)
             if not epoch % 100:
                 print(f'\tEpoch number: {epoch}, current loss: {training_losses[-1]}')
@@ -307,11 +349,11 @@ class PODNeuralNetworkROM:
 
 if __name__ == "__main__":
     snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "25_snapshots_training_matrix.txt")
+                      "50_snapshots_training_matrix.txt")
     residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "25_snapshots_training_residuals.txt")
+                      "50_snapshots_training_residuals.txt")
     parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                       "25_snapshots_training_parameters.txt")
+                       "50_snapshots_training_parameters.txt")
     testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
                            "5_snapshots_testing_parameters.txt")
     testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
@@ -331,23 +373,27 @@ if __name__ == "__main__":
         file.close()
     testing_parameters = np.array(testing_parameters)
 
-    num_pod_modes = 1
-    architecture = 2
-    epochs = 10
-    learning_rate = 5e-3
-    training_batch_size = 15
+    num_pod_modes = 0
+    architecture = 5
+    epochs = 50000
+    learning_rate = 1e-4
+    weight_decay = 8e-3
+    training_batch_size = 10
+    early_stop = 1e-3
 
-    ROM = PODNeuralNetworkROM(snapshots_path, parameters_path, residual_path, num_pod_modes)
-    ROM.initialize_network(architecture, epochs, learning_rate, training_batch_size)
-    ROM.build_network(print_plots=True)
-
-    testing_POD = POD(snapshots=testing_matrix, parameters=testing_parameters)
+    testing_POD = POD(snapshots=testing_matrix, parameters=testing_parameters, num_pod_modes=0)
+    # testing_POD.transform()
     testing_POD.scale_parameters()
+
+    ROM = PODNeuralNetworkROM(snapshots_path, parameters_path, residual_path, num_pod_modes, early_stop)
+    ROM.initialize_network(architecture, epochs, learning_rate, training_batch_size, weight_decay)
+    ROM.build_network(print_plots=True)
 
     for i in range(np.size(testing_parameters, axis=1)):
         params = [testing_POD.parameters[0, i], testing_POD.parameters[1, i]]
         rom_solution = ROM.evaluate_network(params)
-        L2_error = np.linalg.norm(rom_solution - testing_matrix[:, i])
+        diff = rom_solution.reshape(-1) - testing_matrix[:, i]
+        L2_error = np.linalg.norm(diff)
         print(f'L2 error for parameters {testing_parameters[:, i]}: {L2_error}')
 
     print("Done.")

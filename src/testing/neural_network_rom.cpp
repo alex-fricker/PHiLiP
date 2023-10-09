@@ -88,18 +88,21 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
     }
     Py_XDECREF(nnrom_dict);
 
-    PyObject *nnrom_args = PyTuple_Pack(3,
-                                        PyUnicode_DecodeFSDefault(training_pathnames[0].c_str()),
-                                        PyUnicode_DecodeFSDefault(training_pathnames[1].c_str()),
-                                        PyUnicode_DecodeFSDefault(training_pathnames[2].c_str()),
-                                        PyLong_FromLong(all_parameters->reduced_order_param.num_pod_modes));
+    PyObject *one = PyUnicode_DecodeFSDefault(training_pathnames[0].c_str());
+    PyObject *two = PyUnicode_DecodeFSDefault(training_pathnames[1].c_str());
+    PyObject *three = PyUnicode_DecodeFSDefault(training_pathnames[2].c_str());
+    PyObject *four = PyLong_FromLong(all_parameters->reduced_order_param.num_pod_modes);
 
+    PyObject *nnrom_args = PyTuple_Pack(4, one, two, three, four);
+    
     PyObject *nnrom_instance;
     if (PyCallable_Check(nnrom_class_name))
     {
         nnrom_instance = PyObject_CallObject(nnrom_class_name, nnrom_args);  // Init PODNeuralNetworkROM
+        this->pcout << "FUCKKKKK3" << std::endl;
         Py_XDECREF(nnrom_class_name);
         Py_XDECREF(nnrom_args);
+        this->pcout << "FUCKKKKK3" << std::endl;
     }
     else
     {
@@ -108,6 +111,8 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
         return 1;
     }
     Py_XDECREF(nnrom_instance);
+
+    this->pcout << "FUCKKKKK2" << std::endl;
 
     // Initializing the neural network
     PyObject *nnrom_init_kwargs = PyDict_New();
@@ -133,6 +138,8 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
         }
     }
 
+    this->pcout << "FUCKKKKK1" << std::endl;
+
     PyObject *result;
     result = PyObject_CallMethod(nnrom_instance, "initialize_network", "O", nnrom_init_kwargs);
     if (result == nullptr)
@@ -143,18 +150,22 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
     }
     Py_XDECREF(nnrom_init_kwargs);
     
+    this->pcout << "Successfully initialized the damn network" << std::endl;
 
     // Build the neural network
     result = PyObject_CallMethod(nnrom_instance, "build_network", "p", 
         all_parameters->reduced_order_param.print_plots);
     if (result == nullptr)
     {
-        this->pcout <<"Failed to build the neural network." << std::endl;
+        this->pcout << "Failed to build the neural network." << std::endl;
         PyErr_Print();
         return 1;
     }
 
+    this->pcout << "Successfully trained the damn network" << std::endl;
+
     /// Evaluate the neural network
+    this->pcout << "Beggining testing of the neural network." << std::endl;
     int num_eval_points = all_parameters->reduced_order_param.num_evaluation_points;
     int num_params = all_parameters->reduced_order_param.parameter_names.size();
     Eigen::MatrixXd rom_testing_parameters = snapshot_matrix.get_halton_points(num_eval_points);

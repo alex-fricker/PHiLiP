@@ -41,7 +41,7 @@ std::vector<std::string> ROMSnapshots<dim, nstate>::get_pathnames(std::string co
 {
     std::string snapshots_path = save_name + "_matrix.txt";
     std::string parameters_path = save_name + "_parameters.txt";
-    std::string residuals_path = save_name + "residuals.txt";
+    std::string residuals_path = save_name + "_residuals.txt";
     return std::vector<std::string> {snapshots_path, parameters_path, residuals_path};
 }
 
