@@ -55,9 +55,12 @@ private:
     const int mpi_rank; ///< MPI rank.
     dealii::ConditionalOStream pcout;  ///< Used as std::cout, but only prints if mpi_rank == 0
 
-
     /// Selects the points in the parameters space to evaluate the snapshots at using a halton sequence
     void generate_snapshot_points_halton();
+
+    /// Returns the pressure in each cell
+    std::vector<double> get_cell_pressures(
+        const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver) const;
 };
 
 }  // POD namespace

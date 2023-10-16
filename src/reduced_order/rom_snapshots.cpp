@@ -3,6 +3,8 @@
 #include "flow_solver/flow_solver.h"
 #include "flow_solver/flow_solver_factory.h"
 #include "halton.h"
+#include "physics/initial_conditions/initial_condition_function.h"
+#include "physics/euler.h"
 #include <deal.II/lac/vector_operation.h>
 #include <iostream>
 #include <filesystem>
@@ -96,15 +98,28 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
         double residual_L2_norm = snapshot->dg->get_residual_l2norm();
         if (residual_L2_norm < all_parameters->ode_solver_param.nonlinear_steady_residual_tolerance)
         {
-            pod->addSnapshot(snapshot->dg->solution);
-            snapshots_residual_L2_norm(i) = snapshot->dg->get_residual_l2norm();
+            if (all_parameters->reduced_order_param.snapshot_type == "dg_solution")
+            {
+                pod->addSnapshot(snapshot->dg->solution);
+                snapshots_residual_L2_norm(i) = snapshot->dg->get_residual_l2norm();
+            } 
+            else if (all_parameters->reduced_order_param.snapshot_type == "pressure")
+            {
+                std::vector<double> cell_pressures_vector = get_cell_pressures(snapshot);
+                dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(cell_pressures_vector.size());
+                for (size_t i = 0; i < cell_pressures_vector.size(); i++)
+                {
+                    cell_pressures_dealii(i) = cell_pressures_vector[i];
+                }
+                pod->addSnapshot(cell_pressures_dealii);
+                snapshots_residual_L2_norm(i) = snapshot->dg->get_residual_l2norm();
+            }
         }
         else
         {
             snapshots_residual_L2_norm(i) = -1;
-            this->pcout << "Snapshot number "
-                        << i
-                        << " did not converge and is omitted from the snapshot matrix.\n"
+            this->pcout << "Snapshot number " << i
+                        << " did not converge and is omitted from the snapshot matrix.\n" 
                         << std::endl;
         }
     }
@@ -112,11 +127,49 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
 }
 
 template <int dim, int nstate>
-Eigen::MatrixXd ROMSnapshots<dim, nstate>::get_halton_points(const int &n_points)
+std::vector<double> ROMSnapshots<dim, nstate>::get_cell_pressures(
+    const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver) const
 {
-    this->n_snapshots = n_points;
-    generate_snapshot_points_halton();
-    return snapshot_points;
+    Physics::Euler<dim,nstate,double> euler_physics_double = Physics::Euler<dim, nstate, double>(
+        all_parameters,
+        all_parameters->euler_param.ref_length,
+        all_parameters->euler_param.gamma_gas,
+        all_parameters->euler_param.mach_inf,
+        all_parameters->euler_param.angle_of_attack,
+        all_parameters->euler_param.side_slip_angle);
+
+    int overintegrate = 2;
+    dealii::QGauss<dim> quad_extra(flow_solver->dg->max_degree+1+overintegrate);
+    const dealii::Mapping<dim> &mapping = (*(flow_solver->dg->high_order_grid->mapping_fe_field));
+    dealii::FEValues<dim,dim> fe_values_extra(mapping, 
+        flow_solver->dg->fe_collection[all_parameters->flow_solver_param.poly_degree], 
+        quad_extra, 
+        dealii::update_values | dealii::update_JxW_values | dealii::update_quadrature_points);
+    const unsigned int n_quad_pts = fe_values_extra.n_quadrature_points;
+    std::vector<dealii::types::global_dof_index> dofs_indices (fe_values_extra.dofs_per_cell);
+    std::array<double,nstate> soln_at_q;
+    std::vector<double> cell_pressures;
+
+    for (auto cell = flow_solver->dg->dof_handler.begin_active(); cell!=flow_solver->dg->dof_handler.end(); ++cell)
+    {
+        if (!cell->is_locally_owned()) continue;
+        fe_values_extra.reinit (cell);
+        cell->get_dof_indices (dofs_indices);
+
+        for (unsigned int iquad=0; iquad<n_quad_pts; ++iquad)
+        {
+            std::fill(soln_at_q.begin(), soln_at_q.end(), 0);
+            for (unsigned int idof=0; idof<fe_values_extra.dofs_per_cell; ++idof)
+            {
+                const unsigned int istate = fe_values_extra.get_fe().system_to_component_index(idof).first;
+                soln_at_q[istate] += flow_solver->dg->solution[dofs_indices[idof]] * 
+                    fe_values_extra.shape_value_component(idof, iquad, istate);
+            }
+
+            cell_pressures.push_back(euler_physics_double.compute_pressure(soln_at_q));
+        }
+    }
+    return cell_pressures;
 }
 
 template <int dim, int nstate>
@@ -137,6 +190,14 @@ ROMSnapshots<dim, nstate>::solve_snapshot_FOM(const Eigen::RowVectorXd& paramete
     flow_solver->ode_solver->allocate_ode_system();
     flow_solver->run();
     return flow_solver;
+}
+
+template <int dim, int nstate>
+Eigen::MatrixXd ROMSnapshots<dim, nstate>::get_halton_points(const int &n_points)
+{
+    this->n_snapshots = n_points;
+    generate_snapshot_points_halton();
+    return snapshot_points;
 }
 
 template <int dim, int nstate>

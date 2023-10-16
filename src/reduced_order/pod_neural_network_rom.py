@@ -130,6 +130,14 @@ class NeuralNetwork(nn.Module):
             nn.PReLU(),
             nn.Linear(25, self.outSize))
 
+        self.arch6 = nn.Sequential(
+            nn.Linear(2, 7),
+            nn.PReLU(),
+            nn.Linear(7, 10),
+            nn.PReLU(),
+            nn.Linear(10, 7),
+            nn.PReLU(),
+            nn.Linear(7, self.outSize))
     def forward(self, x):
         if self.arch == 1:
             x = self.arch1(x)
@@ -141,6 +149,8 @@ class NeuralNetwork(nn.Module):
             x = self.arch4(x)
         elif self.arch == 5:
             x = self.arch5(x)
+        elif self.arch == 6:
+            x = self.arch6(x)
         return x
 
 
@@ -348,16 +358,38 @@ class PODNeuralNetworkROM:
 
 
 if __name__ == "__main__":
+    # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                   "50_snapshots_training_matrix.txt")
+    # residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                   "50_snapshots_training_residuals.txt")
+    # parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                    "50_snapshots_training_parameters.txt")
+    # testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                        "5_snapshots_testing_parameters.txt")
+    # testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
+    #                           + "5_snapshots_testing_matrix.txt")
+
+    # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                   "50_pressure_snapshots_training_matrix.txt")
+    # residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                   "50_pressure_snapshots_training_residuals.txt")
+    # parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                    "50_pressure_snapshots_training_parameters.txt")
+    # testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                        "5_pressure_snapshots_training_parameters.txt")
+    # testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
+    #                           + "5_pressure_snapshots_training_matrix.txt")
+
     snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "50_snapshots_training_matrix.txt")
+                      "training_snapshots_crm_62pts_50.txt")
     residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "50_snapshots_training_residuals.txt")
+                      "training_residuals_crm_62pts_50.txt")
     parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                       "50_snapshots_training_parameters.txt")
+                       "training_parameters_crm_62pts_50.txt")
     testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                           "5_snapshots_testing_parameters.txt")
+                           "testing_parameters_crm_62pts_50.txt")
     testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-                              + "5_snapshots_testing_matrix.txt")
+                              + "testing_snapshots_crm_62pts_50.txt")
 
     testing_matrix = []
     testing_parameters = []
@@ -373,13 +405,13 @@ if __name__ == "__main__":
         file.close()
     testing_parameters = np.array(testing_parameters)
 
-    num_pod_modes = 0
-    architecture = 5
-    epochs = 50000
-    learning_rate = 1e-4
+    num_pod_modes = 3
+    architecture = 1
+    epochs = 10000
+    learning_rate = 2e-4
     weight_decay = 8e-3
     training_batch_size = 10
-    early_stop = 1e-3
+    early_stop = 0.0001
 
     testing_POD = POD(snapshots=testing_matrix, parameters=testing_parameters, num_pod_modes=0)
     # testing_POD.transform()

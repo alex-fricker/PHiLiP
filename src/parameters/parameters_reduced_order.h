@@ -48,6 +48,7 @@ public:
     int num_kf_splits;  ///< Number of split if doing k-fold cross validation
     bool recompute_training_snapshot_matrix;  ///< Recompute or use existing training matrix
     int num_evaluation_points;  ///< Number of points to test the rom at
+    std::string snapshot_type;   ///< Type of data to build the snapshot matrix with
 
 
     /// Option to print the plots when running the NNROM

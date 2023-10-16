@@ -76,6 +76,10 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("num_evaluation_points", "1",
                           dealii::Patterns::Integer(1, dealii::Patterns::Integer::max_int_value),
                           "Number of points to test the neural network rom at.");
+        prm.declare_entry("snapshot_type", "pressure",
+                          dealii::Patterns::Selection("pressure|dg_solution"),
+                          "Type of data to build the snapshot matrix with.",
+                          "Choices are <pressure|dg_solution>.");
     }
     prm.leave_subsection();
 }
@@ -118,6 +122,7 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
         num_kf_splits = prm.get_integer("num_kf_splits");
         recompute_training_snapshot_matrix = prm.get_bool("recompute_training_snapshot_matrix");
         num_evaluation_points = prm.get_integer("num_evaluation_points");
+        snapshot_type = prm.get("snapshot_type");
     }
     prm.leave_subsection();
 }
