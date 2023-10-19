@@ -369,27 +369,27 @@ if __name__ == "__main__":
     # testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
     #                           + "5_snapshots_testing_matrix.txt")
 
-    # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                   "50_pressure_snapshots_training_matrix.txt")
-    # residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                   "50_pressure_snapshots_training_residuals.txt")
-    # parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                    "50_pressure_snapshots_training_parameters.txt")
-    # testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                        "5_pressure_snapshots_training_parameters.txt")
-    # testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-    #                           + "5_pressure_snapshots_training_matrix.txt")
-
     snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "training_snapshots_crm_62pts_50.txt")
+                      "100_pressure_snapshots_training_matrix.txt")
     residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "training_residuals_crm_62pts_50.txt")
+                      "100_pressure_snapshots_training_residuals.txt")
     parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                       "training_parameters_crm_62pts_50.txt")
+                       "100_pressure_snapshots_training_parameters.txt")
     testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                           "testing_parameters_crm_62pts_50.txt")
+                           "5_pressure_snapshots_training_parameters.txt")
     testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-                              + "testing_snapshots_crm_62pts_50.txt")
+                              + "5_pressure_snapshots_training_matrix.txt")
+
+    # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                   "training_snapshots_crm_62pts_50.txt")
+    # residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                   "training_residuals_crm_62pts_50.txt")
+    # parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                    "training_parameters_crm_62pts_50.txt")
+    # testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                        "testing_parameters_crm_62pts_50.txt")
+    # testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
+    #                           + "testing_snapshots_crm_62pts_50.txt")
 
     testing_matrix = []
     testing_parameters = []

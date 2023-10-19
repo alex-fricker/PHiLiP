@@ -59,7 +59,7 @@ subsection reduced order
   set parameter_names = mach, alpha
   set parameter_min_values = 0.1, 0
   set parameter_max_values = 0.3, 5
-  set num_halton = 300
+  set num_halton = 100
 end
 
 subsection functional

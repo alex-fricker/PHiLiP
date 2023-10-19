@@ -39,42 +39,6 @@ ROMSnapshots<dim, nstate>::ROMSnapshots(
 }
 
 template <int dim, int nstate>
-std::vector<std::string> ROMSnapshots<dim, nstate>::get_pathnames(std::string const &save_name) const
-{
-    std::string snapshots_path = save_name + "_matrix.txt";
-    std::string parameters_path = save_name + "_parameters.txt";
-    std::string residuals_path = save_name + "_residuals.txt";
-    return std::vector<std::string> {snapshots_path, parameters_path, residuals_path};
-}
-
-template <int dim, int nstate>
-std::vector<std::string> ROMSnapshots<dim, nstate>::write_snapshot_data_to_file(std::string const &save_name) const
-{
-    std::vector<std::string> pathnames = get_pathnames(save_name);
-
-    std::ofstream snapshots_matrix_file(pathnames[0]);
-    unsigned int precision = 16;
-    pod->dealiiSnapshotMatrix.print_formatted(snapshots_matrix_file, precision);
-    snapshots_matrix_file.close();
-
-    const static Eigen::IOFormat csv_format(Eigen::FullPrecision, Eigen::DontAlignCols, "  ", "\n");
-    std::ofstream snapshots_points_file(pathnames[1]);
-    if (snapshots_points_file.is_open())
-    {
-        snapshots_points_file << snapshot_points.format(csv_format);
-        snapshots_points_file.close();
-    }
-
-    std::ofstream snapshots_residual_file(pathnames[2]);
-    if (snapshots_residual_file.is_open())
-    {
-        snapshots_residual_file << snapshots_residual_L2_norm.format(csv_format);
-        snapshots_residual_file.close();
-    }
-    return pathnames;
-}
-
-template <int dim, int nstate>
 void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
 {
     this->n_snapshots = n_snapshots;
@@ -138,32 +102,34 @@ std::vector<double> ROMSnapshots<dim, nstate>::get_cell_pressures(
         all_parameters->euler_param.angle_of_attack,
         all_parameters->euler_param.side_slip_angle);
 
-    int overintegrate = 2;
-    dealii::QGauss<dim> quad_extra(flow_solver->dg->max_degree+1+overintegrate);
+    dealii::QGauss<dim> quadrature_rule(flow_solver->dg->max_degree);
     const dealii::Mapping<dim> &mapping = (*(flow_solver->dg->high_order_grid->mapping_fe_field));
-    dealii::FEValues<dim,dim> fe_values_extra(mapping, 
+    dealii::FEValues<dim,dim> fe_values(
+        mapping, 
         flow_solver->dg->fe_collection[all_parameters->flow_solver_param.poly_degree], 
-        quad_extra, 
+        quadrature_rule, 
         dealii::update_values | dealii::update_JxW_values | dealii::update_quadrature_points);
-    const unsigned int n_quad_pts = fe_values_extra.n_quadrature_points;
-    std::vector<dealii::types::global_dof_index> dofs_indices (fe_values_extra.dofs_per_cell);
+    const unsigned int n_quad_pts = fe_values.n_quadrature_points;
+    std::cout << "quad points: " << n_quad_pts << std::endl;
+    std::vector<dealii::types::global_dof_index> dofs_indices (fe_values.dofs_per_cell);
+    std::cout << "dofs inides size: " << dofs_indices.size() << std::endl;
     std::array<double,nstate> soln_at_q;
     std::vector<double> cell_pressures;
 
     for (auto cell = flow_solver->dg->dof_handler.begin_active(); cell!=flow_solver->dg->dof_handler.end(); ++cell)
     {
         if (!cell->is_locally_owned()) continue;
-        fe_values_extra.reinit (cell);
+        fe_values.reinit (cell);
         cell->get_dof_indices (dofs_indices);
 
         for (unsigned int iquad=0; iquad<n_quad_pts; ++iquad)
         {
             std::fill(soln_at_q.begin(), soln_at_q.end(), 0);
-            for (unsigned int idof=0; idof<fe_values_extra.dofs_per_cell; ++idof)
+            for (unsigned int idof=0; idof<fe_values.dofs_per_cell; ++idof)
             {
-                const unsigned int istate = fe_values_extra.get_fe().system_to_component_index(idof).first;
+                const unsigned int istate = fe_values.get_fe().system_to_component_index(idof).first;
                 soln_at_q[istate] += flow_solver->dg->solution[dofs_indices[idof]] * 
-                    fe_values_extra.shape_value_component(idof, iquad, istate);
+                    fe_values.shape_value_component(idof, iquad, istate);
             }
 
             cell_pressures.push_back(euler_physics_double.compute_pressure(soln_at_q));
@@ -190,14 +156,6 @@ ROMSnapshots<dim, nstate>::solve_snapshot_FOM(const Eigen::RowVectorXd& paramete
     flow_solver->ode_solver->allocate_ode_system();
     flow_solver->run();
     return flow_solver;
-}
-
-template <int dim, int nstate>
-Eigen::MatrixXd ROMSnapshots<dim, nstate>::get_halton_points(const int &n_points)
-{
-    this->n_snapshots = n_points;
-    generate_snapshot_points_halton();
-    return snapshot_points;
 }
 
 template <int dim, int nstate>
@@ -302,6 +260,50 @@ Parameters::AllParameters ROMSnapshots<dim, nstate>::reinit_parameters(
         std::abort();
     }
     return updated_parameters;
+}
+
+template <int dim, int nstate>
+std::vector<std::string> ROMSnapshots<dim, nstate>::write_snapshot_data_to_file(std::string const &save_name) const
+{
+    std::vector<std::string> pathnames = get_pathnames(save_name);
+
+    std::ofstream snapshots_matrix_file(pathnames[0]);
+    unsigned int precision = 16;
+    pod->dealiiSnapshotMatrix.print_formatted(snapshots_matrix_file, precision);
+    snapshots_matrix_file.close();
+
+    const static Eigen::IOFormat csv_format(Eigen::FullPrecision, Eigen::DontAlignCols, "  ", "\n");
+    std::ofstream snapshots_points_file(pathnames[1]);
+    if (snapshots_points_file.is_open())
+    {
+        snapshots_points_file << snapshot_points.format(csv_format);
+        snapshots_points_file.close();
+    }
+
+    std::ofstream snapshots_residual_file(pathnames[2]);
+    if (snapshots_residual_file.is_open())
+    {
+        snapshots_residual_file << snapshots_residual_L2_norm.format(csv_format);
+        snapshots_residual_file.close();
+    }
+    return pathnames;
+}
+
+template <int dim, int nstate>
+Eigen::MatrixXd ROMSnapshots<dim, nstate>::get_halton_points(const int &n_points)
+{
+    this->n_snapshots = n_points;
+    generate_snapshot_points_halton();
+    return snapshot_points;
+}
+
+template <int dim, int nstate>
+std::vector<std::string> ROMSnapshots<dim, nstate>::get_pathnames(std::string const &save_name) const
+{
+    std::string snapshots_path = save_name + "_matrix.txt";
+    std::string parameters_path = save_name + "_parameters.txt";
+    std::string residuals_path = save_name + "_residuals.txt";
+    return std::vector<std::string> {snapshots_path, parameters_path, residuals_path};
 }
 
 
