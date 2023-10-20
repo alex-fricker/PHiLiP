@@ -35,7 +35,6 @@ public:
     std::vector<double> parameter_max_values;
 
     /// Neural network ROM parameters ///
-
     bool run_k_fold_cross_validation;  ///< Option to run k-fold cross validation
     bool print_plots;  ///< Option to print the error and training plots
     int num_pod_modes;  ///< Number of POD modes to use
@@ -49,11 +48,6 @@ public:
     bool recompute_training_snapshot_matrix;  ///< Recompute or use existing training matrix
     int num_evaluation_points;  ///< Number of points to test the rom at
     std::string snapshot_type;   ///< Type of data to build the snapshot matrix with
-
-
-    /// Option to print the plots when running the NNROM
-
-    ReducedOrderModelParam (); ///< Constructor
 
     /// Declares the possible variables and sets the defaults.
     static void declare_parameters (dealii::ParameterHandler &prm);
