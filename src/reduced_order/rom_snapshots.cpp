@@ -62,10 +62,10 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
         double residual_L2_norm = snapshot->dg->get_residual_l2norm();
         if (residual_L2_norm < all_parameters->ode_solver_param.nonlinear_steady_residual_tolerance)
         {
+            snapshots_residual_L2_norm(i) = snapshot->dg->get_residual_l2norm();
             if (all_parameters->reduced_order_param.snapshot_type == "dg_solution")
             {
                 pod->addSnapshot(snapshot->dg->solution);
-                snapshots_residual_L2_norm(i) = snapshot->dg->get_residual_l2norm();
             } 
             else if (all_parameters->reduced_order_param.snapshot_type == "pressure")
             {
@@ -76,7 +76,16 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
                     cell_pressures_dealii(i) = cell_pressures_vector[i];
                 }
                 pod->addSnapshot(cell_pressures_dealii);
-                snapshots_residual_L2_norm(i) = snapshot->dg->get_residual_l2norm();
+            }
+            else if (all_parameters->reduced_order_param.snapshot_type == "surface_pressure")
+            {
+                std::vector<double> surface_pressures_vector = get_surface_pressures(snapshot);
+                dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(cell_pressures_vector.size());
+                for (size_t i = 0; i < cell_pressures_vector.size(); i++)
+                {
+                    cell_pressures_dealii(i) = cell_pressures_vector[i];
+                }
+                pod->addSnapshot(cell_pressures_dealii);
             }
         }
         else
@@ -88,6 +97,13 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
         }
     }
     pod->computeBasis();
+}
+
+tempate<int dim, int nstate>
+std::vector<double> ROMSnapshots<dim, nstate>::get_surface_pressures(
+    const std::unique_ptr<FlowSolver::FlowSolver<dim, nstate>> &flow_solver) const
+{
+
 }
 
 template <int dim, int nstate>

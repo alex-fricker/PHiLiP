@@ -61,6 +61,9 @@ private:
     /// Returns the pressure in each cell
     std::vector<double> get_cell_pressures(
         const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver) const;
+
+    /// Returns the pressure at the surface of the airfoil/wing
+    get_surface_pressures(const std::unique_ptr<FlowSolver::FlowSolver<dim, nstate>> &flow_solver) const;
 };
 
 }  // POD namespace
