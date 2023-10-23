@@ -5,7 +5,52 @@
 #include "halton.h"
 #include "physics/initial_conditions/initial_condition_function.h"
 #include "physics/euler.h"
+
 #include <deal.II/lac/vector_operation.h>
+#include <deal.II/base/geometry_info.h>
+#include <deal.II/grid/tria_accessor.h>
+#include <deal.II/grid/cell_id.h>
+#include <deal.II/numerics/data_out.h>
+#include <deal.II/numerics/data_out_dof_data.h>
+
+#include <deal.II/grid/tria.h>
+#include <deal.II/distributed/shared_tria.h>
+#include <deal.II/distributed/tria.h>
+
+#include <deal.II/grid/grid_generator.h>
+#include <deal.II/grid/grid_refinement.h>
+
+#include <deal.II/dofs/dof_handler.h>
+#include <deal.II/dofs/dof_tools.h>
+#include <deal.II/dofs/dof_renumbering.h>
+
+#include <deal.II/dofs/dof_accessor.h>
+
+#include <deal.II/lac/vector.h>
+#include <deal.II/lac/dynamic_sparsity_pattern.h>
+#include <deal.II/lac/sparse_matrix.h>
+
+#include <deal.II/fe/fe_dgq.h>
+
+//#include <deal.II/fe/mapping_q1.h> // Might need mapping_q
+#include <deal.II/fe/mapping_q.h> // Might need mapping_q
+#include <deal.II/fe/mapping_q_generic.h>
+#include <deal.II/fe/mapping_manifold.h>
+#include <deal.II/fe/mapping_fe_field.h>
+
+// Finally, we take our exact solution from the library as well as volume_quadrature
+// and additional tools.
+#include <EpetraExt_Transpose_RowMatrix.h>
+#include <deal.II/distributed/grid_refinement.h>
+#include <deal.II/dofs/dof_renumbering.h>
+#include <deal.II/grid/grid_refinement.h>
+#include <deal.II/numerics/data_out.h>
+#include <deal.II/numerics/data_out_dof_data.h>
+#include <deal.II/numerics/data_out_faces.h>
+#include <deal.II/numerics/derivative_approximation.h>
+#include <deal.II/numerics/vector_tools.h>
+#include <deal.II/numerics/vector_tools.templates.h>
+
 #include <iostream>
 #include <filesystem>
 
@@ -21,6 +66,7 @@ ROMSnapshots<dim, nstate>::ROMSnapshots(
     , parameter_handler(parameter_handler_input)
     , mpi_rank(dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
     , pcout(std::cout, mpi_rank==0)
+    , mpi_communicator(MPI_COMM_WORLD)
 {
     std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> flow_solver =
         FlowSolver::FlowSolverFactory<dim,nstate>::select_flow_case(
@@ -49,11 +95,11 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
 
     snapshots_residual_L2_norm.resize(n_snapshots);
     generate_snapshot_points_halton();
-    for (int i = 0; i < n_snapshots; i++)
+    for (int snapshot_i = 0; snapshot_i < n_snapshots; snapshot_i++)
     {   
-        Eigen::RowVectorXd snapshot_params = snapshot_points.col(i).transpose().segment(0, n_params);
+        Eigen::RowVectorXd snapshot_params = snapshot_points.col(snapshot_i).transpose().segment(0, n_params);
         this->pcout << "\n###################################\nSolving FOM snapshot number " 
-                    << i + 1 
+                    << snapshot_i + 1 
                     << " of " 
                     << n_snapshots 
                     << "\n###################################\n"
@@ -62,36 +108,55 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
         double residual_L2_norm = snapshot->dg->get_residual_l2norm();
         if (residual_L2_norm < all_parameters->ode_solver_param.nonlinear_steady_residual_tolerance)
         {
-            snapshots_residual_L2_norm(i) = snapshot->dg->get_residual_l2norm();
-            if (all_parameters->reduced_order_param.snapshot_type == "dg_solution")
+            snapshots_residual_L2_norm(snapshot_i) = snapshot->dg->get_residual_l2norm();
+            std::string snapshot_type = all_parameters->reduced_order_param.snapshot_type;
+            if (snapshot_type == "dg_solution")
             {
                 pod->addSnapshot(snapshot->dg->solution);
             } 
-            else if (all_parameters->reduced_order_param.snapshot_type == "pressure")
+            else if (snapshot_type == "pressure" || snapshot_type == "surface_pressure")
             {
-                std::vector<double> cell_pressures_vector = get_cell_pressures(snapshot);
-                dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(cell_pressures_vector.size());
+                std::string filename;
+                for (int i = 0; i < n_params ; i++) { filename += std::to_string(snapshot_params(i)) + "_"; }
+                filename += snapshot_type;
+                bool surface_pressure = false;
+                if (snapshot_type == "surface_pressure") { surface_pressure = true; }
+
+                std::vector<double> cell_pressures_vector = get_cell_pressures(snapshot, 
+                    surface_pressure, 
+                    all_parameters->reduced_order_param.save_snapshot_vtu,
+                    filename);
+
+                dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(
+                    cell_pressures_vector.size());
                 for (size_t i = 0; i < cell_pressures_vector.size(); i++)
                 {
                     cell_pressures_dealii(i) = cell_pressures_vector[i];
                 }
+
                 pod->addSnapshot(cell_pressures_dealii);
             }
-            else if (all_parameters->reduced_order_param.snapshot_type == "surface_pressure")
-            {
-                std::vector<double> surface_pressures_vector = get_surface_pressures(snapshot);
-                dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(cell_pressures_vector.size());
-                for (size_t i = 0; i < cell_pressures_vector.size(); i++)
-                {
-                    cell_pressures_dealii(i) = cell_pressures_vector[i];
-                }
-                pod->addSnapshot(cell_pressures_dealii);
-            }
+            // else if (all_parameters->reduced_order_param.snapshot_type == "surface_pressure")
+            // {
+            //     std::string filename;
+            //     for (int i = 0; i < n_params ; i++) { filename += std::to_string(snapshot_params(i)) + "_"; }
+            //     filename += "surface_pressure.vtu";
+
+            //     std::vector<double> cell_pressures_vector = get_surface_pressures(snapshot, true, 
+            //         true, filename);
+            //     dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(
+            //         cell_pressures_vector.size());
+            //     for (size_t i = 0; i < cell_pressures_vector.size(); i++)
+            //     {
+            //         cell_pressures_dealii(i) = cell_pressures_vector[i];
+            //     }
+            //     pod->addSnapshot(cell_pressures_dealii);
+            // }
         }
         else
         {
-            snapshots_residual_L2_norm(i) = -1;
-            this->pcout << "Snapshot number " << i
+            snapshots_residual_L2_norm(snapshot_i) = -1;
+            this->pcout << "Snapshot number " << snapshot_i
                         << " did not converge and is omitted from the snapshot matrix.\n" 
                         << std::endl;
         }
@@ -99,16 +164,12 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
     pod->computeBasis();
 }
 
-tempate<int dim, int nstate>
-std::vector<double> ROMSnapshots<dim, nstate>::get_surface_pressures(
-    const std::unique_ptr<FlowSolver::FlowSolver<dim, nstate>> &flow_solver) const
-{
-
-}
-
 template <int dim, int nstate>
 std::vector<double> ROMSnapshots<dim, nstate>::get_cell_pressures(
-    const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver) const
+    const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
+    const bool only_boundary_cells,
+    const bool export_pressure_vtu,
+    const std::string filename) const
 {
     Physics::Euler<dim,nstate,double> euler_physics_double = Physics::Euler<dim, nstate, double>(
         all_parameters,
@@ -118,28 +179,32 @@ std::vector<double> ROMSnapshots<dim, nstate>::get_cell_pressures(
         all_parameters->euler_param.angle_of_attack,
         all_parameters->euler_param.side_slip_angle);
 
-    dealii::QGauss<dim> quadrature_rule(flow_solver->dg->max_degree);
+    // dealii::QGauss<dim> quadrature_rule(flow_solver->dg->max_degree);
+    dealii::Quadrature<dim> quadrature_rule = 
+        flow_solver->dg->volume_quadrature_collection[flow_solver->dg->volume_quadrature_collection.size() - 1];
     const dealii::Mapping<dim> &mapping = (*(flow_solver->dg->high_order_grid->mapping_fe_field));
     dealii::FEValues<dim,dim> fe_values(
         mapping, 
         flow_solver->dg->fe_collection[all_parameters->flow_solver_param.poly_degree], 
         quadrature_rule, 
         dealii::update_values | dealii::update_JxW_values | dealii::update_quadrature_points);
-    const unsigned int n_quad_pts = fe_values.n_quadrature_points;
-    std::cout << "quad points: " << n_quad_pts << std::endl;
+    // dealii::FE_Q<dim> pressure_fe(all_parameters->flow_solver_param.poly_degree);
     std::vector<dealii::types::global_dof_index> dofs_indices (fe_values.dofs_per_cell);
-    std::cout << "dofs inides size: " << dofs_indices.size() << std::endl;
+
+    const unsigned int n_quad_pts = fe_values.n_quadrature_points;
     std::array<double,nstate> soln_at_q;
+    std::vector<dealii::CellId> cell_ids;
     std::vector<double> cell_pressures;
 
     for (auto cell = flow_solver->dg->dof_handler.begin_active(); cell!=flow_solver->dg->dof_handler.end(); ++cell)
     {
-        if (!cell->is_locally_owned()) continue;
-        fe_values.reinit (cell);
-        cell->get_dof_indices (dofs_indices);
+        if (!cell->is_locally_owned() || (only_boundary_cells && !cell->at_boundary())) { continue; }
+        fe_values.reinit(cell);
+        cell->get_dof_indices(dofs_indices);
+        double avg_cell_pressure = 0;
 
         for (unsigned int iquad=0; iquad<n_quad_pts; ++iquad)
-        {
+        {   
             std::fill(soln_at_q.begin(), soln_at_q.end(), 0);
             for (unsigned int idof=0; idof<fe_values.dofs_per_cell; ++idof)
             {
@@ -147,9 +212,46 @@ std::vector<double> ROMSnapshots<dim, nstate>::get_cell_pressures(
                 soln_at_q[istate] += flow_solver->dg->solution[dofs_indices[idof]] * 
                     fe_values.shape_value_component(idof, iquad, istate);
             }
-
-            cell_pressures.push_back(euler_physics_double.compute_pressure(soln_at_q));
+            avg_cell_pressure += euler_physics_double.compute_pressure(soln_at_q);
         }
+        cell_pressures.push_back(avg_cell_pressure / n_quad_pts);
+        cell_ids.push_back(cell->id());
+    }
+
+    if (export_pressure_vtu)
+    {
+        flow_solver->dg->output_results_vtk(flow_solver->ode_solver->current_iteration);
+        dealii::DataOut<dim, dealii::DoFHandler<dim>> data_out;
+        data_out.attach_dof_handler(flow_solver->dg->dof_handler);
+
+        dealii::Vector<double> pressures_dealii(cell_pressures.begin(), cell_pressures.end());
+        data_out.add_data_vector(pressures_dealii, std::string("pressure"));
+
+        const int n_subdivisions = 0;
+        typename dealii::DataOut<dim,dealii::DoFHandler<dim>>::CurvedCellRegion curved = 
+            dealii::DataOut<dim,dealii::DoFHandler<dim>>::CurvedCellRegion::curved_inner_cells;
+        data_out.build_patches(mapping, n_subdivisions, curved);
+
+        int mpi_rank = dealii::Utilities::MPI::this_mpi_process(mpi_communicator);
+        std::string fn = this->all_parameters->solution_vtk_files_directory_name + "/proc" +
+            dealii::Utilities::int_to_string(mpi_rank, 4) + "_" + filename + ".vtu";
+        std::ofstream output(fn);
+        data_out.write_vtu(output);
+
+        if (mpi_rank == 0)
+        {
+            std::vector<std::string> filenames;
+            unsigned int nproc = dealii::Utilities::MPI::n_mpi_processes(mpi_communicator);
+            for (unsigned int iproc = 0; iproc < nproc; iproc++)
+            {
+                filenames.push_back(this->all_parameters->solution_vtk_files_directory_name + 
+                    "/proc" + dealii::Utilities::int_to_string(iproc, 4) + "_" + filename + ".vtu");
+            }
+            std::string master_fn = this->all_parameters->solution_vtk_files_directory_name + "/" + 
+                filename + ".pvtu";
+            std::ofstream master_output(master_fn);
+            data_out.write_pvtu_record(master_output, filenames);
+        }   
     }
     return cell_pressures;
 }

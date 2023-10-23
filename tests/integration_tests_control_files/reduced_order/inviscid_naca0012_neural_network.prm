@@ -21,14 +21,14 @@ subsection linear solver
   set linear_solver_output = quiet
 
   subsection gmres options
-    set linear_residual_tolerance = 1e-3
+    set linear_residual_tolerance = 1e-8
     set max_iterations = 100
     set restart_number = 50
   end
 end
 
 subsection ODE solver
-  set output_solution_every_x_steps = 1
+  set output_solution_every_x_steps = 0
   set nonlinear_max_iterations = 50
   set nonlinear_steady_residual_tolerance = 1e-8
   set ode_solver_type  = implicit
@@ -57,9 +57,11 @@ end
 
 subsection reduced order
   set parameter_names = mach, alpha
-  set parameter_min_values = 0.1, 0
-  set parameter_max_values = 0.3, 5
-  set num_halton = 100
+  set parameter_min_values = 0.4, 0
+  set parameter_max_values = 0.5, 5
+  set num_halton = 1
+  set save_snapshot_vtu = true
+  set snapshot_type = pressure
 end
 
 subsection functional

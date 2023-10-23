@@ -30,6 +30,13 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("parameter_max_values", "0.7, 4",
                           dealii::Patterns::List(dealii::Patterns::Double(), 0, 10, ","),
                           "Maximum values for parameters");
+        prm.declare_entry("save_snapshot_vtu", "false",
+                          dealii::Patterns::Bool(),
+                          "Option to save the .vtu file for each snapshot in the snapshot matrix.");
+        prm.declare_entry("snapshot_type", "dg_solution",
+                          dealii::Patterns::Selection("pressure|surface_pressure|dg_solution"),
+                          "Type of data to build the snapshot matrix with.",
+                          "Choices are <pressure|surface_pressure|dg_solution>.");
     }
     prm.leave_subsection();
 
@@ -73,10 +80,6 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("num_evaluation_points", "1",
                           dealii::Patterns::Integer(1, dealii::Patterns::Integer::max_int_value),
                           "Number of points to test the neural network rom at.");
-        prm.declare_entry("snapshot_type", "dg_solution",
-                          dealii::Patterns::Selection("pressure|surface_pressure|dg_solution"),
-                          "Type of data to build the snapshot matrix with.",
-                          "Choices are <pressure|surface_pressure|dg_solution>.");
     }
     prm.leave_subsection();
 }
@@ -102,6 +105,9 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
         std::string parameter_max_string = prm.get("parameter_max_values");
         std::unique_ptr<dealii::Patterns::PatternBase> ListPatternMax(new dealii::Patterns::List(dealii::Patterns::Double(), 0, 10, ",")); //Note, in a future version of dealii, this may change from a unique_ptr to simply the object. Will need to use std::move(ListPattern) in next line.
         parameter_max_values = dealii::Patterns::Tools::Convert<decltype(parameter_max_values)>::to_value(parameter_max_string, ListPatternMax);
+    
+        save_snapshot_vtu = prm.get_bool("save_snapshot_vtu");
+        snapshot_type = prm.get("snapshot_type");
     }
     prm.leave_subsection();
 
@@ -119,7 +125,6 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
         num_kf_splits = prm.get_integer("num_kf_splits");
         recompute_training_snapshot_matrix = prm.get_bool("recompute_training_snapshot_matrix");
         num_evaluation_points = prm.get_integer("num_evaluation_points");
-        snapshot_type = prm.get("snapshot_type");
     }
     prm.leave_subsection();
 }

@@ -370,15 +370,15 @@ if __name__ == "__main__":
     #                           + "5_snapshots_testing_matrix.txt")
 
     snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "100_pressure_snapshots_training_matrix.txt")
+                      "30_surface_pressure_snapshots_training_matrix.txt")
     residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "100_pressure_snapshots_training_residuals.txt")
+                      "30_surface_pressure_snapshots_training_residuals.txt")
     parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                       "100_pressure_snapshots_training_parameters.txt")
+                       "30_surface_pressure_snapshots_training_parameters.txt")
     testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                           "5_pressure_snapshots_training_parameters.txt")
+                           "5_surface_pressure_snapshots_training_parameters.txt")
     testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-                              + "5_pressure_snapshots_training_matrix.txt")
+                              + "5_surface_pressure_snapshots_training_matrix.txt")
 
     # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
     #                   "training_snapshots_crm_62pts_50.txt")
