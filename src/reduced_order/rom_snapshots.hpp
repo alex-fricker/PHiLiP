@@ -59,12 +59,21 @@ private:
     /// Selects the points in the parameters space to evaluate the snapshots at using a halton sequence
     void generate_snapshot_points_halton();
 
-    /// Returns the pressure in each cell
-    std::vector<double> get_cell_pressures(
+    /// Returns the pressure at the volume quadrature nodes in each cell
+    std::vector<double> get_cell_volume_pressures(
         const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
-        const bool only_boundary_cells,
         const bool export_pressure_vtu,
         const std::string filename = "pressure.vtu") const;
+
+    /// Returns the pressure at the face quadrature nodes on faces at the boundary
+    std::vector<double> get_boundary_face_pressures(
+        const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
+        const bool export_pressure_vtu,
+        const std::string filename) const;
+
+    /// Computes pressure at quadrature node q
+    double compute_pressure_at_q(
+        const std::array<double ,nstate> &conservative_soln) const;
 };
 }  // POD namespace
 }  // PHiLiP namespace

@@ -43,6 +43,10 @@ subsection grid refinement study
  set num_refinements = 0
 end
 
+subsection functional
+  set functional_type = lift
+end
+
 subsection flow_solver
   set flow_case_type = naca0012
   set poly_degree = 0
@@ -50,7 +54,7 @@ subsection flow_solver
   set steady_state_polynomial_ramping = true
 
   subsection grid
-    set input_mesh_filename = ../../meshes/naca0012_hopw_ref1
+    set input_mesh_filename = ../../meshes/naca0012_hopw_ref0
     set number_of_mesh_refinements = 1
   end
 end
@@ -59,15 +63,11 @@ subsection reduced order
   set parameter_names = mach, alpha
   set parameter_min_values = 0.4, 0
   set parameter_max_values = 0.5, 5
-  set num_halton = 1
+  set num_halton = 50
   set save_snapshot_vtu = true
-  set snapshot_type = pressure
+  set snapshot_type = surface_pressure  # change name to volume_pressure
 end
 
-subsection functional
-  set functional_type = lift
-end
-  
 subsection Neural network
   set run_k_fold_cross_validation = false
   set print_plots = true

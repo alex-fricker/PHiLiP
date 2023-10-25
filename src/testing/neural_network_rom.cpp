@@ -34,7 +34,7 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
 
     std::vector<std::string> training_pathnames;
     std::string training_savename = std::to_string(all_parameters->reduced_order_param.num_halton) +
-        "_" + all_parameters->reduced_order_param.snapshot_type + "_snapshots_training";
+        "_" + all_parameters->reduced_order_param.snapshot_type + "_snapshots";
 
     ProperOrthogonalDecomposition::ROMSnapshots<dim, nstate> snapshot_matrix(
         all_parameters,

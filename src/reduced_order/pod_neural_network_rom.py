@@ -47,6 +47,7 @@ class POD:
         self.POD_coefficients = np.diag(S) @ V.T
         self.POD_basis = U
         # plt.plot(range(len(S)), S)
+        # plt.yscale('log')
         # plt.show()
 
     def inverse(self, coeffs):
@@ -273,7 +274,7 @@ class PODNeuralNetworkROM:
         fold_training_losses = []
         fold_testing_losses = []
         kf = KFold(n_splits=number_splits, shuffle=True, random_state=0)
-        kf_enum = enumerate(kf.split(X=self.POD.parameters, y=self.POD.coefficients))
+        kf_enum = enumerate(kf.split(X=self.POD.POD_coefficients.T, y=self.POD.parameters.T))
         for fold, (training_ids, testing_ids) in kf_enum:
             self.network.apply(self.reset_weights)
             print(f'Fold number: {fold}')
@@ -282,10 +283,10 @@ class PODNeuralNetworkROM:
 
             # Separating training and testing samples by the Ids for the current fold and generating dataloaders
             training_dataset = SnapshotDataset(parameters=self.POD.parameters[:, training_ids],
-                                               targets=self.POD.coefficients[:, testing_ids],
+                                               targets=self.POD.POD_coefficients[:, training_ids],
                                                device=self.device)
             testing_dataset = SnapshotDataset(parameters=self.POD.parameters[:, testing_ids],
-                                              targets=self.POD.coefficients[:, training_ids],
+                                              targets=self.POD.POD_coefficients[:, testing_ids],
                                               device=self.device)
             training_loader = DataLoader(dataset=training_dataset,
                                          batch_size=self.training_batch_size, shuffle=True)
@@ -316,6 +317,7 @@ class PODNeuralNetworkROM:
             plt.xlabel('Epochs')
             plt.ylabel('Loss')
             plt.title('MSE Loss')
+            plt.ylim(0, 0.1)
             plt.legend()
             fig1.show()
         print('Done k-fold cross validation.')
@@ -359,26 +361,26 @@ class PODNeuralNetworkROM:
 
 if __name__ == "__main__":
     # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                   "50_snapshots_training_matrix.txt")
+    #                   "1_pressure_snapshots_training_matrix.txt")
     # residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                   "50_snapshots_training_residuals.txt")
+    #                   "1_pressure_snapshots_training_residuals.txt")
     # parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                    "50_snapshots_training_parameters.txt")
+    #                    "1_pressure_snapshots_training_parameters.txt")
     # testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                        "5_snapshots_testing_parameters.txt")
+    #                        "5_pressure_snapshots_parameters.txt")
     # testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-    #                           + "5_snapshots_testing_matrix.txt")
+    #                           + "5_pressure_snapshots_matrix.txt")
 
     snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "30_surface_pressure_snapshots_training_matrix.txt")
+                      "50_surface_pressure_snapshots_matrix.txt")
     residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "30_surface_pressure_snapshots_training_residuals.txt")
+                      "50_surface_pressure_snapshots_residuals.txt")
     parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                       "30_surface_pressure_snapshots_training_parameters.txt")
+                       "50_surface_pressure_snapshots_parameters.txt")
     testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                           "5_surface_pressure_snapshots_training_parameters.txt")
+                           "5_surface_pressure_snapshots_parameters.txt")
     testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-                              + "5_surface_pressure_snapshots_training_matrix.txt")
+                              + "5_surface_pressure_snapshots_matrix.txt")
 
     # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
     #                   "training_snapshots_crm_62pts_50.txt")
@@ -405,11 +407,11 @@ if __name__ == "__main__":
         file.close()
     testing_parameters = np.array(testing_parameters)
 
-    num_pod_modes = 3
+    num_pod_modes = 8
     architecture = 1
-    epochs = 10000
-    learning_rate = 2e-4
-    weight_decay = 8e-3
+    epochs = 1000
+    learning_rate = 1e-4
+    weight_decay = 1e-2
     training_batch_size = 10
     early_stop = 0.0001
 
@@ -420,6 +422,7 @@ if __name__ == "__main__":
     ROM = PODNeuralNetworkROM(snapshots_path, parameters_path, residual_path, num_pod_modes, early_stop)
     ROM.initialize_network(architecture, epochs, learning_rate, training_batch_size, weight_decay)
     ROM.build_network(print_plots=True)
+    # ROM.k_fold_cross_valida   tion(testing_batch_size=2, number_splits=5, print_plots=True)
 
     for i in range(np.size(testing_parameters, axis=1)):
         params = [testing_POD.parameters[0, i], testing_POD.parameters[1, i]]
