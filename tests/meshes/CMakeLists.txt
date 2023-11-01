@@ -10,6 +10,8 @@ configure_file(3d_cube_periodic.msh 3d_cube_periodic.msh COPYONLY)
 configure_file(SD7003_1_cell_spanwise.msh SD7003_1_cell_spanwise.msh COPYONLY)
 configure_file(SD7003_4_cell_spanwise.msh SD7003_4_cell_spanwise.msh COPYONLY)
 configure_file(SD7003_12_cell_spanwise.msh SD7003_12_cell_spanwise.msh COPYONLY)
+configure_file(2D_naca0012.msh 2D_naca0012.msh COPYONLY)
+configure_file(3D_naca0012.msh 3D_naca0012.msh COPYONLY)
 
 set (filename "naca0012_hopw_ref0.msh")
 if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${filename})

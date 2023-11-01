@@ -35,7 +35,7 @@ public:
     std::vector<double> parameter_max_values;
 
     /// Save the vtu file of each snapshot when using ROMSnapshots::build_snapshot_matrix()
-    bool save_snapshot_vtu;
+    bool save_snapshot_vtk;
 
     /// Neural network ROM parameters ///
     bool run_k_fold_cross_validation;  ///< Option to run k-fold cross validation

@@ -113,9 +113,20 @@ add_test(
 # =======================================
 # Inviscid NACA0012 Neural Network
 # =======================================
-configure_file(inviscid_naca0012_neural_network.prm inviscid_naca0012_neural_network.prm COPYONLY)
+configure_file(2d_inviscid_naca0012_neural_network.prm 2d_inviscid_naca0012_neural_network.prm COPYONLY)
 add_test(
-        NAME INVISCID_NACA0012_NEURAL_NETWORK_ROM
-        COMMAND mpirun -np ${MPIMAX} ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_2D -i ${CMAKE_CURRENT_BINARY_DIR}/inviscid_naca0012_neural_network.prm
+        NAME 2D_INVISCID_NACA0012_NEURAL_NETWORK_ROM
+        COMMAND mpirun -np ${MPIMAX} ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_2D -i ${CMAKE_CURRENT_BINARY_DIR}/2d_inviscid_naca0012_neural_network.prm
         WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
 )
+
+# =======================================
+# Inviscid NACA0012 Neural Network
+# =======================================
+configure_file(3d_inviscid_naca0012_neural_network.prm 3d_inviscid_naca0012_neural_network.prm COPYONLY)
+add_test(
+        NAME 3D_INVISCID_NACA0012_NEURAL_NETWORK_ROM
+        COMMAND mpirun -np ${MPIMAX} ${EXECUTABLE_OUTPUT_PATH}/PHiLiP_3D -i ${CMAKE_CURRENT_BINARY_DIR}/3d_inviscid_naca0012_neural_network.prm
+        WORKING_DIRECTORY ${TEST_OUTPUT_DIR}
+)
+

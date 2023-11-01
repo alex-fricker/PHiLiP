@@ -2,13 +2,15 @@
 # ---------------------
 
 set test_type = neural_network_rom
-set dimension = 2
+set dimension = 3
 set pde_type  = euler
 set conv_num_flux = roe
-set diss_num_flux = bassi_rebay_2
+# set diss_num_flux = bassi_rebay_2
 # set use_split_form = false
 set overintegration = 0
 set solution_vtk_files_directory_name = solver_output_files
+set output_high_order_grid            = false
+set enable_higher_order_vtk_output    = false
 
 subsection euler
   set reference_length = 1.0
@@ -22,14 +24,14 @@ subsection linear solver
 
   subsection gmres options
     set linear_residual_tolerance = 1e-8
-    set max_iterations = 100
-    set restart_number = 50
+    set max_iterations = 2000
+    set restart_number = 200
   end
 end
 
 subsection ODE solver
-  set output_solution_every_x_steps = 0
-  set nonlinear_max_iterations = 50
+  set output_solution_every_x_steps = 10000
+  set nonlinear_max_iterations = 1000
   set nonlinear_steady_residual_tolerance = 1e-8
   set ode_solver_type  = implicit
   set initial_time_step = 1e3
@@ -40,7 +42,8 @@ subsection ODE solver
 end
 
 subsection grid refinement study
- set num_refinements = 0
+  set num_refinements = 0
+  set output_vtk = false
 end
 
 subsection functional
@@ -54,17 +57,29 @@ subsection flow_solver
   set steady_state_polynomial_ramping = true
 
   subsection grid
-    set input_mesh_filename = ../../meshes/naca0012_hopw_ref0
-    set number_of_mesh_refinements = 1
+    set input_mesh_filename = ../../meshes/3D_naca0012
+    set grid_degree = 2
+
+    subsection gmsh_boundary_IDs
+      set use_periodic_BC_in_x        = false
+      set use_periodic_BC_in_y        = false
+      set use_periodic_BC_in_z        = true
+      set z_periodic_id_face_1        = 2005
+      set z_periodic_id_face_2        = 2006
+    end
   end
+end
+
+subsection functional
+  set functional_type = lift
 end
 
 subsection reduced order
   set parameter_names = mach, alpha
-  set parameter_min_values = 0.4, 0
-  set parameter_max_values = 0.5, 5
-  set num_halton = 50
-  set save_snapshot_vtu = true
+  set parameter_min_values = 0.7, 1
+  set parameter_max_values = 0.85, 5
+  set num_halton = 1
+  set save_snapshot_vtk = true
   set snapshot_type = surface_pressure  # change name to volume_pressure
 end
 

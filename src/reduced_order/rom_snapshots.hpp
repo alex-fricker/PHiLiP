@@ -1,12 +1,18 @@
 #ifndef _ROM_SNAPSHOTS__
 #define _ROM_SNAPSHOTS__
 
-#include <eigen/Eigen/Dense>
-#include "parameters/all_parameters.h"
-#include <deal.II/numerics/vector_tools.h>
-#include "pod_basis_online.h"
-#include <string>
 #include "../flow_solver/flow_solver.h"
+#include "parameters/all_parameters.h"
+#include "pod_basis_online.h"
+
+#include <eigen/Eigen/Dense>
+
+#include <deal.II/numerics/vector_tools.h>
+#include <deal.II/numerics/data_out_faces.h>
+
+#include <string>
+
+
 
 
 namespace PHiLiP {
@@ -60,20 +66,54 @@ private:
     void generate_snapshot_points_halton();
 
     /// Returns the pressure at the volume quadrature nodes in each cell
-    std::vector<double> get_cell_volume_pressures(
+    dealii::LinearAlgebra::distributed::Vector<double> get_cell_volume_pressures(
         const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
-        const bool export_pressure_vtu,
-        const std::string filename = "pressure.vtu") const;
+        const std::string &filename = "pressure.vtu") const;
 
     /// Returns the pressure at the face quadrature nodes on faces at the boundary
-    std::vector<double> get_boundary_face_pressures(
+    dealii::LinearAlgebra::distributed::Vector<double> get_boundary_face_pressures(
         const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
-        const bool export_pressure_vtu,
-        const std::string filename) const;
+        const std::string &filename = "pressure.vtu") const;
 
     /// Computes pressure at quadrature node q
     double compute_pressure_at_q(
         const std::array<double ,nstate> &conservative_soln) const;
+
+    /// Output the results of the snapshot generate to vtk file
+    void output_surface_solution_vtk(
+        const dealii::LinearAlgebra::distributed::Vector<double>&pressures,
+        const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
+        const dealii::Mapping<dim> &mapping,
+        const std::string &filename) const;
+
+    void output_volume_solution_vtk(
+        const dealii::LinearAlgebra::distributed::Vector<double> &pressures,
+        const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
+        const dealii::Mapping<dim> &mapping,
+        const std::string &filename) const;
+};
+
+template <int dim, int nstate>
+class DataOutAirfoilSurface : public dealii::DataOutFaces<dim, dealii::DoFHandler<dim>>
+{
+private:
+    const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver;
+    const int mpi_rank;
+    dealii::ConditionalOStream pcout;
+
+    using DoFHandlerType = typename dealii::DoFHandler<dim>;
+    static const unsigned int dimension = DoFHandlerType::dimension;
+    static const unsigned int space_dimension = DoFHandlerType::space_dimension;
+    using cell_iterator = typename dealii::DataOut_DoFData<
+        DoFHandlerType, 
+        dimension - 1, 
+        dimension>::cell_iterator;
+    using FaceDescriptor = typename std::pair<cell_iterator, unsigned int>;
+
+public:
+    DataOutAirfoilSurface(const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver);
+    virtual FaceDescriptor first_face() override;
+    virtual FaceDescriptor next_face(const FaceDescriptor &face) override;
 };
 }  // POD namespace
 }  // PHiLiP namespace

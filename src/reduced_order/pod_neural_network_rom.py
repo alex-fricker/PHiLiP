@@ -239,7 +239,7 @@ class PODNeuralNetworkROM:
         if print_plots:
             plt.plot(np.arange(0, epoch-1),
                      training_losses,
-                     label=f'Training, final iteration loss: {training_losses[-1]:.4f}')
+                     label=f'Training, final iteration loss: {training_losses[-1]:.2e}')
             plt.xlabel('Epochs')
             plt.ylabel('Loss')
             plt.title('Full dataset training losses')
@@ -310,14 +310,15 @@ class PODNeuralNetworkROM:
             fig1 = plt.figure()
             plt.plot(np.arange(0, self.epochs),
                      avg_training_losses,
-                     label=f'Training, final iteration loss: {avg_training_losses[-1]:.4f}')
+                     label=f'Training, final iteration loss: {avg_training_losses[-1]:.2e}')
             plt.plot(np.arange(0, self.epochs),
                      avg_testing_losses,
-                     label=f'Testing, final iteration loss: {avg_testing_losses[-1]:.4f}')
+                     label=f'Testing, final iteration loss: {avg_testing_losses[-1]:.2e}')
             plt.xlabel('Epochs')
             plt.ylabel('Loss')
             plt.title('MSE Loss')
-            plt.ylim(0, 0.1)
+            plt.ylim(0, max(np.max(avg_testing_losses), np.max(avg_training_losses))*1.001)
+            plt.yscale('log')
             plt.legend()
             fig1.show()
         print('Done k-fold cross validation.')
@@ -360,27 +361,37 @@ class PODNeuralNetworkROM:
 
 
 if __name__ == "__main__":
-    # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                   "1_pressure_snapshots_training_matrix.txt")
-    # residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                   "1_pressure_snapshots_training_residuals.txt")
-    # parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                    "1_pressure_snapshots_training_parameters.txt")
-    # testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                        "5_pressure_snapshots_parameters.txt")
-    # testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-    #                           + "5_pressure_snapshots_matrix.txt")
-
     snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "50_surface_pressure_snapshots_matrix.txt")
+                      "50_volume_pressure_snapshots_training_matrix.txt")
     residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "50_surface_pressure_snapshots_residuals.txt")
+                      "50_volume_pressure_snapshots_training_residuals.txt")
     parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                       "50_surface_pressure_snapshots_parameters.txt")
+                       "50_volume_pressure_snapshots_training_parameters.txt")
     testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                           "5_surface_pressure_snapshots_parameters.txt")
+                           "5_volume_pressure_snapshots_parameters.txt")
     testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-                              + "5_surface_pressure_snapshots_matrix.txt")
+                              + "5_volume_pressure_snapshots_matrix.txt")
+
+    # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                   "62_surface_pressure_snapshots_matrix.txt")
+    # residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                   "62_surface_pressure_snapshots_residuals.txt")
+    # parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                    "62_surface_pressure_snapshots_parameters.txt")
+    # testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+    #                        "5_surface_pressure_snapshots_parameters.txt")
+    # testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
+    #                           + "5_surface_pressure_snapshots_matrix.txt")
+    # num_pod_modes = 0
+    # architecture = 1
+    # learning_rate = 1e-4
+    # weight_decay = 1e-2
+    # epochs = 2000
+    # # epochs = 5000
+    # # learning_rate = 1e-3
+    # # weight_decay = 5e-3
+    # training_batch_size = 10
+    # early_stop = 1e-4
 
     # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
     #                   "training_snapshots_crm_62pts_50.txt")
@@ -392,6 +403,13 @@ if __name__ == "__main__":
     #                        "testing_parameters_crm_62pts_50.txt")
     # testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
     #                           + "testing_snapshots_crm_62pts_50.txt")
+    num_pod_modes = 0
+    architecture = 1
+    learning_rate = 5e-4
+    weight_decay = 1e-3
+    epochs = 1500
+    training_batch_size = 15
+    early_stop = 1e-5
 
     testing_matrix = []
     testing_parameters = []
@@ -407,14 +425,6 @@ if __name__ == "__main__":
         file.close()
     testing_parameters = np.array(testing_parameters)
 
-    num_pod_modes = 8
-    architecture = 1
-    epochs = 1000
-    learning_rate = 1e-4
-    weight_decay = 1e-2
-    training_batch_size = 10
-    early_stop = 0.0001
-
     testing_POD = POD(snapshots=testing_matrix, parameters=testing_parameters, num_pod_modes=0)
     # testing_POD.transform()
     testing_POD.scale_parameters()
@@ -422,13 +432,19 @@ if __name__ == "__main__":
     ROM = PODNeuralNetworkROM(snapshots_path, parameters_path, residual_path, num_pod_modes, early_stop)
     ROM.initialize_network(architecture, epochs, learning_rate, training_batch_size, weight_decay)
     ROM.build_network(print_plots=True)
-    # ROM.k_fold_cross_valida   tion(testing_batch_size=2, number_splits=5, print_plots=True)
+    # ROM.k_fold_cross_validation(testing_batch_size=2, number_splits=5, print_plots=True)
 
     for i in range(np.size(testing_parameters, axis=1)):
         params = [testing_POD.parameters[0, i], testing_POD.parameters[1, i]]
         rom_solution = ROM.evaluate_network(params)
+        fom_solution = testing_matrix[:, i]
         diff = rom_solution.reshape(-1) - testing_matrix[:, i]
         L2_error = np.linalg.norm(diff)
         print(f'L2 error for parameters {testing_parameters[:, i]}: {L2_error}')
+
+        plt.plot(np.linspace(0, 1, len(fom_solution)), fom_solution, label="PHiLiP solution")
+        plt.plot(np.linspace(0, 1, len(fom_solution)), rom_solution, label="NNROM solution")
+        plt.legend()
+        plt.show()
 
     print("Done.")
