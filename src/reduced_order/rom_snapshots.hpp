@@ -80,11 +80,11 @@ private:
         const std::array<double ,nstate> &conservative_soln) const;
 
     /// Output the results of the snapshot generate to vtk file
-    void output_surface_solution_vtk(
-        const dealii::LinearAlgebra::distributed::Vector<double>&pressures,
-        const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
-        const dealii::Mapping<dim> &mapping,
-        const std::string &filename) const;
+    // void output_surface_solution_vtk(
+    //     const dealii::LinearAlgebra::distributed::Vector<double>&pressures,
+    //     const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
+    //     const dealii::Mapping<dim> &mapping,
+    //     const std::string &filename) const;
 
     void output_volume_solution_vtk(
         const dealii::LinearAlgebra::distributed::Vector<double> &pressures,
