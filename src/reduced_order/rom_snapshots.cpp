@@ -237,17 +237,19 @@ dealii::LinearAlgebra::distributed::Vector<double> ROMSnapshots<dim, nstate>::ge
     std::cout << "Proc: " << mpi_rank << " Global cell pressures vector size before assigning: " << cell_pressures_dealii.size() << std::endl;
     int vec = 0;
 
+    int idx = 0;
     for (std::vector<double> local_pressure_vector : cell_pressures_global)
     {
         for (size_t i = 0; i < local_pressure_vector.size(); ++i)
         {
             pcout << " local pressure element: " << local_pressure_vector[i] << " from vector: " << vec << std::endl;
-            cell_pressures_dealii(i) = local_pressure_vector[i];
+            cell_pressures_dealii(idx) = local_pressure_vector[i];
+            ++idx;
         }
         ++vec;
     }
-    // cell_pressures_dealii.update_ghost_values();
-    cell_pressures_dealii.compress(dealii::VectorOperation::add);
+    cell_pressures_dealii.update_ghost_values();
+    // cell_pressures_dealii.compress(dealii::VectorOperation::add);
     std::cout << "Proc: " << mpi_rank << " Global cell pressures vector size after assigning: " << cell_pressures_dealii.size() << std::endl;
 
 
