@@ -56,6 +56,7 @@
 #include <iostream>
 #include <filesystem>
 #include <mpi.h>
+#include <typeinfo>
 
 namespace PHiLiP {
 namespace ProperOrthogonalDecomposition{
@@ -131,11 +132,11 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
                     // pressures_vector = get_boundary_face_pressures(snapshot, filename);
                     pressures = get_boundary_face_pressures(snapshot, filename);
                 }
-                else if (snapshot_type == "volume_pressure")
-                {
-                    // pressures_vector = get_cell_volume_pressures(snapshot, filename);
-                    pressures = get_cell_volume_pressures(snapshot, filename);
-                }
+                // else if (snapshot_type == "volume_pressure")
+                // {
+                //     // pressures_vector = get_cell_volume_pressures(snapshot, filename);
+                //     pressures = get_cell_volume_pressures(snapshot, filename);
+                // }
 
                 // dealii::LinearAlgebra::distributed::Vector<double> pressures_dealii(
                 //     pressures_vector.size());
@@ -164,7 +165,6 @@ void ROMSnapshots<dim, nstate>::build_snapshot_matrix(const int n_snapshots)
 }
 
 template <int dim, int nstate>
-// std::vector<double> ROMSnapshots<dim, nstate>::get_boundary_face_pressures(
 dealii::LinearAlgebra::distributed::Vector<double> ROMSnapshots<dim, nstate>::get_boundary_face_pressures(
     const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
     const std::string &filename) const
@@ -181,22 +181,22 @@ dealii::LinearAlgebra::distributed::Vector<double> ROMSnapshots<dim, nstate>::ge
     std::array<double,nstate> soln_at_q;
     std::vector<double> cell_pressures;
     std::vector<std::vector<double>> quad_node_locations;
-    int num_faces_local = 0;
+    int num_face_quads_local = 0;
 
-    std::cout << "\n\nEVALUATING PRESSURES\n\n" << std::endl;
     for (auto cell = flow_solver->dg->dof_handler.begin_active(); cell != flow_solver->dg->dof_handler.end(); ++cell)
     {
         if (!cell->is_locally_owned() || !cell->at_boundary()) { continue; }
+
         for (const auto &face_id : dealii::GeometryInfo<dim>::face_indices())
         {
             if (cell->face(face_id)->boundary_id() == 1001)
             {
-                ++num_faces_local;
                 fe_face_values.reinit(cell, face_id);
                 cell->get_dof_indices(dofs_indices);
 
                 for (unsigned int iquad = 0; iquad < n_quad_pts; ++iquad)
                 {   
+                    ++num_face_quads_local;
                     std::fill(soln_at_q.begin(), soln_at_q.end(), 0);
                     for (unsigned int idof=0; idof<fe_face_values.dofs_per_cell; ++idof)
                     {
@@ -205,158 +205,113 @@ dealii::LinearAlgebra::distributed::Vector<double> ROMSnapshots<dim, nstate>::ge
                             fe_face_values.shape_value_component(idof, iquad, istate);
                     }
                     double pressure = compute_pressure_at_q(soln_at_q);
+                    // double pressure = compute_pressure_coeff_at_q(soln_at_q);
                     cell_pressures.push_back(pressure);
 
                     dealii::Point<dim> quad_pt = fe_face_values.quadrature_point(iquad);
-                    std::vector<double> point_loc(dim);
-                    for (int i = 0; i < dim; ++i) { point_loc[i] = quad_pt[i]; }
-                    quad_node_locations.push_back(point_loc);
+                    std::vector<double> quad_pt_loc(dim);
+                    for (int i = 0; i < dim; i++) { quad_pt_loc[i] = quad_pt[i]; }
+                    quad_node_locations.push_back(quad_pt_loc);
+
+                    std::cout << "Quad node location: " << quad_pt_loc[0] << ", " << quad_pt_loc[1] << " Pressure: " << pressure << std::endl;
                 }
             }
-            else { continue; }
         }
     }
     MPI_Barrier(mpi_communicator);
-    std::cout << "DONE COMPUTING PRESSURES" << std::endl;
-    
-    int num_faces_global = 0;
-    MPI_Allreduce(&num_faces_local, &num_faces_global, 1, MPI_INT, MPI_SUM, mpi_communicator);
+
+    int num_face_quads_global = 0;
+    MPI_Allreduce(&num_face_quads_local, &num_face_quads_global, 1, MPI_INT, MPI_SUM, mpi_communicator);
     std::vector<std::vector<double>> cell_pressures_global = 
         dealii::Utilities::MPI::all_gather(mpi_communicator, cell_pressures);
-
-    // dealii::IndexSet local_idx_set(num_faces_local);
-    // local_idx_set.add_range(0, num_faces_local);
-    // dealii::IndexSet global_idx_set(num_faces_global);
-    // global_idx_set.add_range(0, num_faces_global);
-    // dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(
-    //     local_idx_set, global_idx_set, mpi_communicator);
-    dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(num_faces_global);
-
-    std::cout << "Global number of faces: " << num_faces_global << std::endl;
-    std::cout << "Proc: " << mpi_rank << " Pressure vector size: " << cell_pressures.size() << std::endl;
-    std::cout << "Proc: " << mpi_rank << " Global cell pressures vector size before assigning: " << cell_pressures_dealii.size() << std::endl;
-    int vec = 0;
+    dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(num_face_quads_global);
 
     int idx = 0;
-    for (std::vector<double> local_pressure_vector : cell_pressures_global)
+    for (std::vector<double> pressure_vector_local : cell_pressures_global)
     {
-        for (size_t i = 0; i < local_pressure_vector.size(); ++i)
+        for (size_t i = 0; i < pressure_vector_local.size(); i++)
         {
-            pcout << " local pressure element: " << local_pressure_vector[i] << " from vector: " << vec << std::endl;
-            cell_pressures_dealii(idx) = local_pressure_vector[i];
+            cell_pressures_dealii(idx) = pressure_vector_local[i];
             ++idx;
         }
-        ++vec;
     }
     cell_pressures_dealii.update_ghost_values();
-    // cell_pressures_dealii.compress(dealii::VectorOperation::add);
-    std::cout << "Proc: " << mpi_rank << " Global cell pressures vector size after assigning: " << cell_pressures_dealii.size() << std::endl;
 
+    MPI_Barrier(mpi_communicator);
 
-
-
-
-
-
-    pcout << "Printing global dealii vector pressures: " << cell_pressures_dealii.size() << " on proc: " << mpi_rank << std::endl;
-    for (size_t i = 0; i < cell_pressures_dealii.size(); ++i)
+    if (all_parameters->reduced_order_param.save_snapshot_vtk)
     {
-        pcout << cell_pressures_dealii(i) << std::endl;
-    }
+        std::vector<std::vector<std::vector<double>>> quad_node_locations_global = 
+            dealii::Utilities::MPI::all_gather(mpi_communicator, quad_node_locations);
 
-    pcout << "DONE EVALUATING PRESSURES" << std::endl;
-    if (all_parameters->reduced_order_param.save_snapshot_vtk) 
-    {
+        dealii::LAPACKFullMatrix<double> data_output_matrix(num_face_quads_global, dim + 1);
+
+        int row = 0;
+        for (unsigned int proc = 0; proc < dealii::Utilities::MPI::n_mpi_processes(mpi_communicator); proc++)
+        {
+            std::vector<double> pressure_vector_local = cell_pressures_global[proc];
+            std::vector<std::vector<double>> quad_node_locations_local = quad_node_locations_global[proc];
+
+            if (pressure_vector_local.empty()) { continue; }
+
+            for (size_t m = 0; m < pressure_vector_local.size(); m++)
+            {
+                for (int n = 0; n < dim; n++)
+                {
+                    data_output_matrix.set(row, n, quad_node_locations_local[m][n]);
+                }
+                // data_output_matrix.set(row, dim, pressure_vector_local[m]);
+                ++row;
+            }
+        }
+
+        // std::string fn = all_parameters->solution_vtk_files_directory_name + "/" + filename + ".txt";
+        std::string fn = all_parameters->solution_vtk_files_directory_name + "/point_locations.txt";
+        std::ofstream snapshot_data_file(fn);
+        unsigned int precision = 16;
+        data_output_matrix.print_formatted(snapshot_data_file, precision);
+        snapshot_data_file.close();
         pcout << filename << std::endl;
-        // pcout << "OUTPUTTING CUSTOM" << std::endl;
-        // output_surface_solution_vtk(cell_pressures, flow_solver, mapping, filename);
-        // pcout << "DONE OUTPUTTING CUSTOM" << std::endl;
     }
+
+    flow_solver->dg->output_face_results_vtk(0, 0);
+    flow_solver->dg->output_results_vtk(0, 0);
+    // if (all_parameters->reduced_order_param.save_snapshot_vtk) 
+    // {
+    //     pcout << filename << std::endl;
+    //     pcout << "OUTPUTTING CUSTOM" << std::endl;
+    //     output_surface_solution_vtk(cell_pressures_dealii, flow_solver, mapping, filename);
+    //     pcout << "DONE OUTPUTTING CUSTOM" << std::endl;
+    // }
     return cell_pressures_dealii;
 }
 
 template <int dim, int nstate>
-// std::vector<double> ROMSnapshots<dim, nstate>::get_cell_volume_pressures(
-dealii::LinearAlgebra::distributed::Vector<double> ROMSnapshots<dim, nstate>::get_cell_volume_pressures(
-    const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
-    const std::string &filename) const
+double ROMSnapshots<dim, nstate>::compute_pressure_coeff_at_q(
+    const std::array<double ,nstate> &conservative_soln) const
 {
+    const double density = conservative_soln[0];
+    const double tot_energy = conservative_soln[nstate-1];
 
-    using DoFHandlerType = typename dealii::DoFHandler<dim>;
-    static const unsigned int dimension = DoFHandlerType::dimension;
-    static const unsigned int space_dimension = DoFHandlerType::space_dimension;
-    typename dealii::Triangulation<dimension, space_dimension>::active_cell_iterator
-        cell = flow_solver->dg->triangulation->begin_active();
-    int counter = 0;
-    int counter2 = 0;
-    for (; cell != flow_solver->dg->triangulation->end(); ++cell)
-    {
-        if (cell->is_locally_owned())
-        {
-            for (const unsigned int f : dealii::GeometryInfo<dimension>::face_indices())
-            {
-                pcout << "FACE ID: " << cell->face(f)->boundary_id() << std::endl;
-                if (cell->face(f)->at_boundary() && cell->face(f)->boundary_id() == 1001)
-                {
-                    ++counter;
-                }
-                if (cell->face(f)->boundary_id() != 1004 || cell->face(f)->boundary_id() != dealii::numbers::internal_face_boundary_id)
-                {
-                    ++counter2;
-                }
-            }
-        }
+    dealii::Tensor<1, dim, double> vel;
+    for (int d = 0; d < dim; d++) { vel[d] = conservative_soln[d+1] / density; }
+
+    double vel2 = 0.0;
+    for (int d = 0; d < dim; d++) 
+    { 
+        vel2 = vel2 + vel[d] * vel[d]; 
     }
-    pcout << "COUNTER: " << counter << " COUNTER2: " << counter2 << std::endl;
 
-    const dealii::Mapping<dim> &mapping = (*(flow_solver->dg->high_order_grid->mapping_fe_field));
-    dealii::FEValues<dim,dim> fe_values(
-        mapping, 
-        flow_solver->dg->fe_collection[all_parameters->flow_solver_param.poly_degree], 
-        flow_solver->dg->volume_quadrature_collection[all_parameters->flow_solver_param.poly_degree],
-        dealii::update_values | dealii::update_JxW_values | dealii::update_quadrature_points);
-    std::vector<dealii::types::global_dof_index> dofs_indices (fe_values.dofs_per_cell);
+    double gamm1 = all_parameters->euler_param.gamma_gas - 1.0;
+    double pressure = gamm1 * (tot_energy - 0.5 * density * vel2);    
 
-    const unsigned int n_quad_pts = fe_values.n_quadrature_points;
-    std::array<double,nstate> soln_at_q;
-    // std::vector<double> cell_pressures;
-    dealii::LinearAlgebra::distributed::Vector<double> cell_pressures(flow_solver->dg->triangulation->n_global_active_cells());
-    int local_element_i = 0;
-    int foo = 0;
+    double Minf = all_parameters->euler_param.mach_inf;
+    double gamma_gas = all_parameters->euler_param.gamma_gas;
+    double pressure_inf = 1.0 / (gamma_gas * Minf * Minf);
+    double cp = (pressure - pressure_inf) / 0.5 ;
 
-    for (auto cell = flow_solver->dg->dof_handler.begin_active(); cell!=flow_solver->dg->dof_handler.end(); ++cell)
-    {
-        ++foo;
-        if (!cell->is_locally_owned()) { continue; }
-        fe_values.reinit(cell);
-        cell->get_dof_indices(dofs_indices);
-
-        for (unsigned int iquad=0; iquad<n_quad_pts; ++iquad)
-        {   
-            std::fill(soln_at_q.begin(), soln_at_q.end(), 0);
-            for (unsigned int idof=0; idof<fe_values.dofs_per_cell; ++idof)
-            {
-                const unsigned int istate = fe_values.get_fe().system_to_component_index(idof).first;
-                soln_at_q[istate] += flow_solver->dg->solution[dofs_indices[idof]] * 
-                    fe_values.shape_value_component(idof, iquad, istate);
-            }
-            // cell_pressures.local_element(local_element_i) = compute_pressure_at_q(soln_at_q);
-            unsigned int global_id = cell->active_cell_index();
-            cell_pressures(global_id + iquad) = compute_pressure_at_q(soln_at_q);
-            ++local_element_i;
-        }
-    }
-    cell_pressures.compress(dealii::VectorOperation::add);
-    cell_pressures.update_ghost_values();
-    pcout << "Foo: " << foo << std::endl;
-
-    if (all_parameters->reduced_order_param.save_snapshot_vtk)
-    {
-        flow_solver->dg->output_results_vtk(flow_solver->ode_solver->current_iteration);
-        output_volume_solution_vtk(cell_pressures, flow_solver, mapping, filename);
-    }
-    return cell_pressures;
-} 
+    return cp;
+}
 
 template <int dim, int nstate>
 double ROMSnapshots<dim, nstate>::compute_pressure_at_q(
@@ -567,7 +522,7 @@ DataOutAirfoilSurface<dim, nstate>::first_face()
     for (auto cell = flow_solver->dg->dof_handler.begin_active(); cell != flow_solver->dg->dof_handler.end(); ++cell)
     {
         if (!cell->is_locally_owned() || !cell->at_boundary()) { continue; }
-        for (unsigned int face_id : dealii::GeometryInfo<dim>::face_indices())
+        for (const auto &face_id : dealii::GeometryInfo<dim>::face_indices())
         {
             if (cell->face(face_id)->boundary_id() == 1001)
             {
@@ -591,7 +546,7 @@ DataOutAirfoilSurface<dim, nstate>::next_face(const FaceDescriptor &old_face)
     FaceDescriptor face = old_face;
     Assert(face.first->is_locally_owned(), dealii::ExcInternalError());
     Assert(face.first->at_boundary(), dealii::ExcInternalError());
-    for (unsigned int face_id = face.second + 1; face_id < dealii::GeometryInfo<dimension>::faces_per_cell; ++face_id)
+    for (auto face_id = face.second + 1; face_id < dealii::GeometryInfo<dimension>::faces_per_cell; ++face_id)
     {
         if (face.first->face(face_id)->boundary_id() == 1001)
         {
@@ -613,7 +568,7 @@ DataOutAirfoilSurface<dim, nstate>::next_face(const FaceDescriptor &old_face)
     {
         if (!active_cell->is_locally_owned() || !active_cell->at_boundary()) { continue; }
         pcout << active_cell->at_boundary() << std::endl;
-        for (unsigned int face_id : dealii::GeometryInfo<dim>::face_indices())
+        for (const auto &face_id : dealii::GeometryInfo<dim>::face_indices())
         {
             if (active_cell->face(face_id)->boundary_id() == 1001)
             {
@@ -628,116 +583,12 @@ DataOutAirfoilSurface<dim, nstate>::next_face(const FaceDescriptor &old_face)
         }
     }   
 
-    // face.first  = flow_solver->dg->dof_handler.end();
-    // face.second = 0;
-    // pcout << "fell off edge returning invalid pointer" << std::endl;
-    // return face;
+    face.first  = flow_solver->dg->dof_handler.end();
+    face.second = 0;
+    pcout << "fell off edge returning invalid pointer" << std::endl;
+    return face;
     return FaceDescriptor();
 }
-
-
-
-
-
-
-
-
-// #if PHILIP_DIM > 1
-// template <int dim, typename DoFHandlerType = dealii::DoFHandler<dim>>
-// class DataOutAirfoilSurface : public dealii::DataOutFaces<dim, DoFHandlerType>
-// {
-//     static const unsigned int dimension = DoFHandlerType::dimension;
-//     static const unsigned int space_dimension = DoFHandlerType::space_dimension;
-//     using cell_iterator = typename dealii::DataOut_DoFData<DoFHandlerType, dimension - 1, 
-//         dimension>::cell_iterator;
-//     using FaceDescriptor = typename std::pair<cell_iterator, unsigned int>;
-
-//     virtual FaceDescriptor first_face() override;
-//     virtual FaceDescriptor next_face(const FaceDescriptor &face) override;
-// };
-
-// template <int dim, typename DoFHandlerType>
-// typename DataOutAirfoilSurface<dim, DoFHandlerType>::FaceDescriptor
-// DataOutAirfoilSurface<dim, DoFHandlerType>::first_face()
-// {
-//     // simply find first active cell with a face on the boundary
-//     typename dealii::Triangulation<dimension, space_dimension>::active_cell_iterator
-//         cell = this->triangulation->begin_active();
-//     for (; cell != this->triangulation->end(); ++cell)
-//     {
-//         if (cell->is_locally_owned())
-//         {
-//             for (const unsigned int f : dealii::GeometryInfo<dimension>::face_indices())
-//             {
-//                 if (cell->face(f)->at_boundary())
-//                 {
-//                     if (cell->face(f)->boundary_id() != 1004)
-//                     {
-//                         std::cout << "boundary ID inside custom DataOut class: " << cell->face(f)->boundary_id() << std::endl;
-//                         return FaceDescriptor(cell, f);
-//                     }
-//                 }
-//             }
-//         }
-//     }
-  
-//     // just return an invalid descriptor if we haven't found a locally
-//     // owned face. this can happen in parallel where all boundary
-//     // faces are owned by other processors
-//     return FaceDescriptor();
-// }
-
-// template <int dim, typename DoFHandlerType>
-// typename DataOutAirfoilSurface<dim, DoFHandlerType>::FaceDescriptor
-// DataOutAirfoilSurface<dim, DoFHandlerType>::next_face(const FaceDescriptor &old_face)
-// {
-//     FaceDescriptor face = old_face;
-  
-//     // first check whether the present cell has more faces on the boundary. since
-//     // we started with this face, its cell must clearly be locally owned
-//     Assert(face.first->is_locally_owned(), dealii::ExcInternalError());
-//     for (unsigned int f = face.second + 1; f < dealii::GeometryInfo<dimension>::faces_per_cell; ++f)
-//         if (face.first->face(f)->at_boundary()) 
-//             if (face.first->face(f)->boundary_id() != 1004) {
-//                 // yup, that is so, so return it
-//                 face.second = f;
-//                 return face;
-//             }
-  
-//     // otherwise find the next active cell that has a face on the boundary
-  
-//     // convert the iterator to an active_iterator and advance this to the next
-//     // active cell
-//     typename dealii::Triangulation<dimension, space_dimension>::active_cell_iterator
-//       active_cell = face.first;
-  
-//     // increase face pointer by one
-//     ++active_cell;
-  
-//     // while there are active cells
-//     while (active_cell != this->triangulation->end()) {
-//         // check all the faces of this active cell. but skip it altogether
-//         // if it isn't locally owned
-//         if (active_cell->is_locally_owned())
-//             for (const unsigned int f : dealii::GeometryInfo<dimension>::face_indices())
-//                 if (active_cell->face(f)->at_boundary())
-//                     if (active_cell->face(f)->boundary_id() != 1004) {
-//                         face.first  = active_cell;
-//                         face.second = f;
-//                         return face;
-//                     }
-            
-//         // the present cell had no faces on the boundary (or was not locally
-//         // owned), so check next cell
-//         ++active_cell;
-//     }   
-      
-//     // we fell off the edge, so return with invalid pointer
-//     face.first  = this->triangulation->end();
-//     face.second = 0;
-//     return face;
-// }
-// #endif 
 
 template <int dim, int nstate>
 void ROMSnapshots<dim, nstate>::output_volume_solution_vtk(
@@ -806,97 +657,179 @@ void ROMSnapshots<dim, nstate>::output_volume_solution_vtk(
     }   
 }
 
+template <int dim, int nstate>
+void ROMSnapshots<dim, nstate>::output_surface_solution_vtk(
+    const dealii::LinearAlgebra::distributed::Vector<double> &pressures,
+    const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
+    const dealii::Mapping<dim> &mapping,
+    const std::string &filename) const
+{
+    pcout << "PRESSURES SIZE: " << pressures.size() << std::endl;
+    // std::shared_ptr<DGBase<dim, double>> dg = DGFactory<dim, double>::create_discontinuous_galerkin(
+    //     all_parameters,
+    //     all_parameters->flow_solver_param.poly_degree,
+    //     all_parameters->flow_solver_param.max_poly_degree_for_adaptation,
+    //     all_parameters->flow_solver_param.grid_degree,
+    //     flow_solver->flow_solver_case->generate_grid());
+
+    // dealii::DataOutFaces<dim, dealii::DoFHandler<dim>> data_out;
+    // DataOutAirfoilSurface<dim, dealii::DoFHandler<dim>> data_out;
+    pcout << "init" << std::endl;
+    DataOutAirfoilSurface<dim, nstate> data_out(flow_solver);
+    pcout << "attach dof handler" << std::endl;
+    data_out.attach_dof_handler(flow_solver->dg->dof_handler);
+
+    // std::vector<std::string> position_names;
+    // for(int d=0;d<dim;++d) 
+    // {
+    //     if (d==0) position_names.push_back("x");
+    //     if (d==1) position_names.push_back("y");
+    //     if (d==2) position_names.push_back("z");
+    // }
+    // std::vector<dealii::DataComponentInterpretation::DataComponentInterpretation> 
+    //     data_component_interpretation(dim, dealii::DataComponentInterpretation::component_is_scalar);
+    // data_out.add_data_vector (flow_solver->dg->high_order_grid->dof_handler_grid, 
+    //     flow_solver->dg->high_order_grid->volume_nodes, 
+    //     position_names, data_component_interpretation);
+
+    //     dealii::Vector<float> subdomain(flow_solver->dg->triangulation->n_active_cells());
+    // for (unsigned int i = 0; i < subdomain.size(); ++i) 
+    // {
+    //     subdomain(i) = flow_solver->dg->triangulation->locally_owned_subdomain();
+    // }
+    // data_out.add_data_vector(subdomain, std::string("subdomain"),
+    //     dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim-1,dim>::DataVectorType::type_cell_data);
+
+    // pcout << "create Postprocess" << std::endl;
+    // const std::unique_ptr< dealii::DataPostprocessor<dim> > post_processor = 
+    //     Postprocess::PostprocessorFactory<dim>::create_Postprocessor(all_parameters);
+    // pcout << "add post process" << std::endl;
+    // data_out.add_data_vector(flow_solver->dg->solution, *post_processor);
+
+    // dealii::Vector<double> pressures_dealii(pressures.begin(), pressures.end());
+    pcout << "add pressures" << std::endl;
+    data_out.add_data_vector(pressures, std::string("Surface Pressure"),
+        dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim-1,dim>::DataVectorType::type_cell_data);
+
+    // const bool write_higher_order_cells = false;//(dim>1 && grid_degree > 1) ? true : false;
+    // dealii::DataOutBase::VtkFlags vtkflags(
+    //     all_parameters->ode_solver_param.initial_time_step,
+    //     flow_solver->ode_solver->current_iteration,
+    //     true,
+    //     dealii::DataOutBase::VtkFlags::ZlibCompressionLevel::best_compression,
+    //     write_higher_order_cells);
+    // data_out.set_flags(vtkflags);
+    pcout << "build_patches" << std::endl;
+    data_out.build_patches(mapping, all_parameters->flow_solver_param.grid_degree);
+
+    pcout << "write vtus" << std::endl;
+    int mpi_rank = dealii::Utilities::MPI::this_mpi_process(mpi_communicator);
+    std::string fn = this->all_parameters->solution_vtk_files_directory_name + "/proc" +
+        dealii::Utilities::int_to_string(mpi_rank, 4) + "_" + filename + ".vtu";
+    std::ofstream output(fn);
+    data_out.write_vtu(output);
+
+    pcout << "write pvtus" << std::endl;
+    if (mpi_rank == 0)
+    {
+        std::vector<std::string> filenames;
+        unsigned int nproc = dealii::Utilities::MPI::n_mpi_processes(mpi_communicator);
+        for (unsigned int iproc = 0; iproc < nproc; iproc++)
+        {
+            filenames.push_back("proc" + dealii::Utilities::int_to_string(iproc, 4) + "_" + filename + ".vtu");
+        }
+        std::string master_fn = this->all_parameters->solution_vtk_files_directory_name + "/" + 
+            filename + ".pvtu";
+        std::ofstream master_output(master_fn);
+        data_out.write_pvtu_record(master_output, filenames);
+    }   
+}
+
 // template <int dim, int nstate>
-// void ROMSnapshots<dim, nstate>::output_surface_solution_vtk(
-//     const dealii::LinearAlgebra::distributed::Vector<double> &pressures,
+// dealii::LinearAlgebra::distributed::Vector<double> ROMSnapshots<dim, nstate>::get_cell_volume_pressures(
 //     const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
-//     const dealii::Mapping<dim> &mapping,
 //     const std::string &filename) const
 // {
-//     pcout << "PRESSURES SIZE: " << pressures.size() << std::endl;
-//     // std::shared_ptr<DGBase<dim, double>> dg = DGFactory<dim, double>::create_discontinuous_galerkin(
-//     //     all_parameters,
-//     //     all_parameters->flow_solver_param.poly_degree,
-//     //     all_parameters->flow_solver_param.max_poly_degree_for_adaptation,
-//     //     all_parameters->flow_solver_param.grid_degree,
-//     //     flow_solver->flow_solver_case->generate_grid());
 
-//     // dealii::DataOutFaces<dim, dealii::DoFHandler<dim>> data_out;
-//     // DataOutAirfoilSurface<dim, dealii::DoFHandler<dim>> data_out;
-//     pcout << "init" << std::endl;
-//     DataOutAirfoilSurface<dim, nstate> data_out(flow_solver);
-//     pcout << "attach dof handler" << std::endl;
-//     data_out.attach_dof_handler(flow_solver->dg->dof_handler);
-
-//     // std::vector<std::string> position_names;
-//     // for(int d=0;d<dim;++d) 
-//     // {
-//     //     if (d==0) position_names.push_back("x");
-//     //     if (d==1) position_names.push_back("y");
-//     //     if (d==2) position_names.push_back("z");
-//     // }
-//     // std::vector<dealii::DataComponentInterpretation::DataComponentInterpretation> 
-//     //     data_component_interpretation(dim, dealii::DataComponentInterpretation::component_is_scalar);
-//     // data_out.add_data_vector (flow_solver->dg->high_order_grid->dof_handler_grid, 
-//     //     flow_solver->dg->high_order_grid->volume_nodes, 
-//     //     position_names, data_component_interpretation);
-
-//     //     dealii::Vector<float> subdomain(flow_solver->dg->triangulation->n_active_cells());
-//     // for (unsigned int i = 0; i < subdomain.size(); ++i) 
-//     // {
-//     //     subdomain(i) = flow_solver->dg->triangulation->locally_owned_subdomain();
-//     // }
-//     // data_out.add_data_vector(subdomain, std::string("subdomain"),
-//     //     dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim-1,dim>::DataVectorType::type_cell_data);
-
-//     pcout << "create Postprocess" << std::endl;
-//     const std::unique_ptr< dealii::DataPostprocessor<dim> > post_processor = 
-//         Postprocess::PostprocessorFactory<dim>::create_Postprocessor(all_parameters);
-//     pcout << "add post process" << std::endl;
-//     data_out.add_data_vector(flow_solver->dg->solution, *post_processor);
-
-//     dealii::Vector<double> pressures_dealii(pressures.begin(), pressures.end());
-//     pcout << "add pressures" << std::endl;
-//     data_out.add_data_vector(pressures_dealii, std::string("Surface Pressure"),
-//         dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim-1,dim>::DataVectorType::type_dof_data);
-
-//     // const bool write_higher_order_cells = false;//(dim>1 && grid_degree > 1) ? true : false;
-//     // dealii::DataOutBase::VtkFlags vtkflags(
-//     //     all_parameters->ode_solver_param.initial_time_step,
-//     //     flow_solver->ode_solver->current_iteration,
-//     //     true,
-//     //     dealii::DataOutBase::VtkFlags::ZlibCompressionLevel::best_compression,
-//     //     write_higher_order_cells);
-//     // data_out.set_flags(vtkflags);
-//     pcout << "build_patches" << std::endl;
-//     data_out.build_patches(mapping, all_parameters->flow_solver_param.grid_degree);
-
-//     pcout << "write vtus" << std::endl;
-//     int mpi_rank = dealii::Utilities::MPI::this_mpi_process(mpi_communicator);
-//     std::string fn = this->all_parameters->solution_vtk_files_directory_name + "/proc" +
-//         dealii::Utilities::int_to_string(mpi_rank, 4) + "_" + filename + ".vtu";
-//     std::ofstream output(fn);
-//     data_out.write_vtu(output);
-
-//     pcout << "write pvtus" << std::endl;
-//     if (mpi_rank == 0)
+//     using DoFHandlerType = typename dealii::DoFHandler<dim>;
+//     static const unsigned int dimension = DoFHandlerType::dimension;
+//     static const unsigned int space_dimension = DoFHandlerType::space_dimension;
+//     typename dealii::Triangulation<dimension, space_dimension>::active_cell_iterator
+//         cell = flow_solver->dg->triangulation->begin_active();
+//     int counter = 0;
+//     int counter2 = 0;
+//     for (; cell != flow_solver->dg->triangulation->end(); ++cell)
 //     {
-//         std::vector<std::string> filenames;
-//         unsigned int nproc = dealii::Utilities::MPI::n_mpi_processes(mpi_communicator);
-//         for (unsigned int iproc = 0; iproc < nproc; iproc++)
+//         if (cell->is_locally_owned())
 //         {
-//             filenames.push_back("proc" + dealii::Utilities::int_to_string(iproc, 4) + "_" + filename + ".vtu");
+//             for (const unsigned int f : dealii::GeometryInfo<dimension>::face_indices())
+//             {
+//                 pcout << "FACE ID: " << cell->face(f)->boundary_id() << std::endl;
+//                 if (cell->face(f)->at_boundary() && cell->face(f)->boundary_id() == 1001)
+//                 {
+//                     ++counter;
+//                 }
+//                 if (cell->face(f)->boundary_id() != 1004 || cell->face(f)->boundary_id() != dealii::numbers::internal_face_boundary_id)
+//                 {
+//                     ++counter2;
+//                 }
+//             }
 //         }
-//         std::string master_fn = this->all_parameters->solution_vtk_files_directory_name + "/" + 
-//             filename + ".pvtu";
-//         std::ofstream master_output(master_fn);
-//         data_out.write_pvtu_record(master_output, filenames);
-//     }   
+//     }
+//     pcout << "COUNTER: " << counter << " COUNTER2: " << counter2 << std::endl;
+
+//     const dealii::Mapping<dim> &mapping = (*(flow_solver->dg->high_order_grid->mapping_fe_field));
+//     dealii::FEValues<dim,dim> fe_values(
+//         mapping, 
+//         flow_solver->dg->fe_collection[all_parameters->flow_solver_param.poly_degree], 
+//         flow_solver->dg->volume_quadrature_collection[all_parameters->flow_solver_param.poly_degree],
+//         dealii::update_values | dealii::update_JxW_values | dealii::update_quadrature_points);
+//     std::vector<dealii::types::global_dof_index> dofs_indices (fe_values.dofs_per_cell);
+
+//     const unsigned int n_quad_pts = fe_values.n_quadrature_points;
+//     std::array<double,nstate> soln_at_q;
+//     // std::vector<double> cell_pressures;
+//     dealii::LinearAlgebra::distributed::Vector<double> cell_pressures(flow_solver->dg->triangulation->n_global_active_cells());
+//     int local_element_i = 0;
+//     int foo = 0;
+
+//     for (auto cell = flow_solver->dg->dof_handler.begin_active(); cell!=flow_solver->dg->dof_handler.end(); ++cell)
+//     {
+//         ++foo;
+//         if (!cell->is_locally_owned()) { continue; }
+//         fe_values.reinit(cell);
+//         cell->get_dof_indices(dofs_indices);
+
+//         for (unsigned int iquad=0; iquad<n_quad_pts; ++iquad)
+//         {   
+//             std::fill(soln_at_q.begin(), soln_at_q.end(), 0);
+//             for (unsigned int idof=0; idof<fe_values.dofs_per_cell; ++idof)
+//             {
+//                 const unsigned int istate = fe_values.get_fe().system_to_component_index(idof).first;
+//                 soln_at_q[istate] += flow_solver->dg->solution[dofs_indices[idof]] * 
+//                     fe_values.shape_value_component(idof, iquad, istate);
+//             }
+//             // cell_pressures.local_element(local_element_i) = compute_pressure_at_q(soln_at_q);
+//             unsigned int global_id = cell->active_cell_index();
+//             cell_pressures(global_id + iquad) = compute_pressure_at_q(soln_at_q);
+//             ++local_element_i;
+//         }
+//     }
+//     cell_pressures.compress(dealii::VectorOperation::add);
+//     cell_pressures.update_ghost_values();
+//     pcout << "Foo: " << foo << std::endl;
+
+//     if (all_parameters->reduced_order_param.save_snapshot_vtk)
+//     {
+//         flow_solver->dg->output_results_vtk(flow_solver->ode_solver->current_iteration);
+//         output_volume_solution_vtk(cell_pressures, flow_solver, mapping, filename);
+//     }
+//     return cell_pressures;
 // }
 
 #if PHILIP_DIM!=1
     template class ROMSnapshots<PHILIP_DIM, PHILIP_DIM+2>;
-    template class DataOutAirfoilSurface<PHILIP_DIM, PHILIP_DIM+2>;
+    // template class DataOutAirfoilSurface<PHILIP_DIM, PHILIP_DIM+2>;
 #endif
 
 }  // POD Namespace

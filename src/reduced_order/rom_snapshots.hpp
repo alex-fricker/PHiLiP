@@ -66,9 +66,9 @@ private:
     void generate_snapshot_points_halton();
 
     /// Returns the pressure at the volume quadrature nodes in each cell
-    dealii::LinearAlgebra::distributed::Vector<double> get_cell_volume_pressures(
-        const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
-        const std::string &filename = "pressure.vtu") const;
+    // dealii::LinearAlgebra::distributed::Vector<double> get_cell_volume_pressures(
+    //     const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
+    //     const std::string &filename = "pressure.vtu") const;
 
     /// Returns the pressure at the face quadrature nodes on faces at the boundary
     dealii::LinearAlgebra::distributed::Vector<double> get_boundary_face_pressures(
@@ -79,12 +79,15 @@ private:
     double compute_pressure_at_q(
         const std::array<double ,nstate> &conservative_soln) const;
 
+    double compute_pressure_coeff_at_q(
+        const std::array<double ,nstate> &conservative_soln) const;
+
     /// Output the results of the snapshot generate to vtk file
-    // void output_surface_solution_vtk(
-    //     const dealii::LinearAlgebra::distributed::Vector<double>&pressures,
-    //     const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
-    //     const dealii::Mapping<dim> &mapping,
-    //     const std::string &filename) const;
+    void output_surface_solution_vtk(
+        const dealii::LinearAlgebra::distributed::Vector<double>&pressures,
+        const std::unique_ptr<FlowSolver::FlowSolver<dim,nstate>> &flow_solver,
+        const dealii::Mapping<dim> &mapping,
+        const std::string &filename) const;
 
     void output_volume_solution_vtk(
         const dealii::LinearAlgebra::distributed::Vector<double> &pressures,

@@ -21,14 +21,16 @@ class POD:
         self.POD_coefficients = None
         self.sort_pattern = None
         self.inverse_sort = None
+        self.scaler = None
 
-    def scale_parameters(self):
-        scaler = preprocessing.MinMaxScaler()
-        self.parameters = scaler.fit_transform(self.parameters.T)
+    def scale_parameters(self, params):
+        self.scaler = preprocessing.MinMaxScaler()
+        self.scaler.fit(params.T)
+        self.parameters = self.scaler.transform(params.T)
         self.parameters = self.parameters.T
 
     def transform(self):
-        self.scale_parameters()
+        self.scale_parameters(self.parameters)
         self.ref_state = np.mean(self.snapshots, axis=1).reshape(-1, 1)
         self.sort_pattern = np.argsort(self.ref_state, axis=0)
         self.inverse_sort = np.argsort(self.sort_pattern, axis=0)
@@ -248,26 +250,28 @@ class PODNeuralNetworkROM:
             plt.show()
         print('Done training neural network.')
 
-    def evaluate_network(self, parameters):
+    def evaluate_network(self, params_array):
         self.network.eval()
-        params = np.array(parameters).reshape(-1)
-        params = tc.from_numpy(params)
-        print('predicing coeffs')
-        coefficients = self.network(params.float())
-        coefficients = coefficients.cpu().detach().numpy()
-        print('computing inverse')
-        rom_solution = self.POD.inverse(coefficients)
-        print('saving file')
+        params_array = self.POD.scaler.transform(params_array.T)
+        params_array = params_array.T
+        rom_solutions = []
 
-        if os.path.exists(self.solution_path):
-            os.remove(self.solution_path)
+        for i in range(0, np.size(params_array, axis=1)):
+            params = tc.from_numpy(params_array[:, i].reshape(-1))
+            coefficients = self.network(params.float())
+            coefficients = coefficients.cpu().detach().numpy()
+            solution = self.POD.inverse(coefficients)
 
-        with open(self.solution_path, 'w', newline="\n") as file:
-            for line in range(len(rom_solution)):
-                file.write(str(rom_solution[line, 0]) + "\n")
-            file.close()
+            if os.path.exists(self.solution_path):
+                os.remove(self.solution_path)
+
+            with open(self.solution_path, 'w', newline="\n") as file:
+                for line in range(len(solution)):
+                    file.write(str(solution[line, 0]) + "\n")
+                file.close()
+            rom_solutions.append(solution)
         print('done evaluating network')
-        return rom_solution
+        return rom_solutions
 
     def k_fold_cross_validation(self, testing_batch_size, number_splits, print_plots=False):
         print("Running k-fold cross validation.")
@@ -359,29 +363,59 @@ class PODNeuralNetworkROM:
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
 
+    @staticmethod
+    def visualize_solution(points_locations, parameters, solutions, solution_names):
+        points = []
+        with open(points_locations) as file:
+            for line in file:
+                points.append([float(x) for x in line.strip().split()])
+        file.close()
+        points = np.array(points)
+        data = points
+        for sol_id in range(len(solutions)):
+            data = np.hstack((data, solutions[sol_id]))
+
+        upper = data[np.argwhere(data[:, 1] > 0).reshape(-1), :]
+        upper_sort_args = np.argsort(upper[:, 0])
+        upper = upper[upper_sort_args, :]
+
+        lower = data[np.argwhere(data[:, 1] < 0).reshape(-1), :]
+        lower_sort_args = np.argsort(lower[:, 0])
+        lower = lower[lower_sort_args, :]
+
+        # plt.plot(np.append(upper[:, 0], lower[:, 0][::-1]), np.append(upper[:, 1], lower[:, 1][::-1]), label="Airfoil Surface")
+        for sol_id in range(2, 2+len(solutions)):
+            plt.plot(np.append(upper[:, 0], lower[:, 0][::-1]), np.append(upper[:, sol_id], lower[:, sol_id][::-1]), label=solution_names[sol_id-2])
+
+        plt.title(f"Mach: {parameters[0]:.3f}, AoA: {np.rad2deg(parameters[1]):.3f} deg")
+        plt.legend()
+        plt.show()
+
+
 
 if __name__ == "__main__":
-    snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "50_volume_pressure_snapshots_training_matrix.txt")
-    residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "50_volume_pressure_snapshots_training_residuals.txt")
-    parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                       "50_volume_pressure_snapshots_training_parameters.txt")
-    testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                           "5_volume_pressure_snapshots_parameters.txt")
-    testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-                              + "5_volume_pressure_snapshots_matrix.txt")
-
+    points = r"/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/solver_output_files/point_locations.txt"
     # snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                   "62_surface_pressure_snapshots_matrix.txt")
+    #                   "50_volume_pressure_snapshots_training_matrix.txt")
     # residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                   "62_surface_pressure_snapshots_residuals.txt")
+    #                   "50_volume_pressure_snapshots_training_residuals.txt")
     # parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                    "62_surface_pressure_snapshots_parameters.txt")
+    #                    "50_volume_pressure_snapshots_training_parameters.txt")
     # testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-    #                        "5_surface_pressure_snapshots_parameters.txt")
+    #                        "5_volume_pressure_snapshots_parameters.txt")
     # testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-    #                           + "5_surface_pressure_snapshots_matrix.txt")
+    #                           + "5_volume_pressure_snapshots_matrix.txt")
+
+    snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+                      "50_surface_pressure_snapshots_matrix.txt")
+    residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+                      "50_surface_pressure_snapshots_residuals.txt")
+    parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+                       "50_surface_pressure_snapshots_parameters.txt")
+    testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
+                           "5_surface_pressure_snapshots_parameters.txt")
+    testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
+                              + "5_surface_pressure_snapshots_matrix.txt")
     # num_pod_modes = 0
     # architecture = 1
     # learning_rate = 1e-4
@@ -409,7 +443,7 @@ if __name__ == "__main__":
     weight_decay = 1e-3
     epochs = 1500
     training_batch_size = 15
-    early_stop = 1e-5
+    early_stop = 1e-6
 
     testing_matrix = []
     testing_parameters = []
@@ -425,26 +459,25 @@ if __name__ == "__main__":
         file.close()
     testing_parameters = np.array(testing_parameters)
 
-    testing_POD = POD(snapshots=testing_matrix, parameters=testing_parameters, num_pod_modes=0)
-    # testing_POD.transform()
-    testing_POD.scale_parameters()
+    # testing_POD = POD(snapshots=testing_matrix, parameters=testing_parameters, num_pod_modes=0)
+    # # testing_POD.transform()
+    # testing_POD.scale_parameters()
 
     ROM = PODNeuralNetworkROM(snapshots_path, parameters_path, residual_path, num_pod_modes, early_stop)
     ROM.initialize_network(architecture, epochs, learning_rate, training_batch_size, weight_decay)
     ROM.build_network(print_plots=True)
     # ROM.k_fold_cross_validation(testing_batch_size=2, number_splits=5, print_plots=True)
 
+    rom_solutions = ROM.evaluate_network(testing_parameters)
     for i in range(np.size(testing_parameters, axis=1)):
-        params = [testing_POD.parameters[0, i], testing_POD.parameters[1, i]]
-        rom_solution = ROM.evaluate_network(params)
+        # params = [testing_parameters[0, i], testing_parameters[1, i]]
+        params = testing_parameters[:, i]
+        rom_solution = rom_solutions[i]
         fom_solution = testing_matrix[:, i]
         diff = rom_solution.reshape(-1) - testing_matrix[:, i]
         L2_error = np.linalg.norm(diff)
         print(f'L2 error for parameters {testing_parameters[:, i]}: {L2_error}')
 
-        plt.plot(np.linspace(0, 1, len(fom_solution)), fom_solution, label="PHiLiP solution")
-        plt.plot(np.linspace(0, 1, len(fom_solution)), rom_solution, label="NNROM solution")
-        plt.legend()
-        plt.show()
+        ROM.visualize_solution(points, testing_parameters[:, i], [rom_solution, fom_solution.reshape(-1, 1)], ["ROM", "FOM"])
 
     print("Done.")
