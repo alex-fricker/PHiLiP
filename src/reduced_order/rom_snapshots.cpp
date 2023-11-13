@@ -212,8 +212,6 @@ dealii::LinearAlgebra::distributed::Vector<double> ROMSnapshots<dim, nstate>::ge
                     std::vector<double> quad_pt_loc(dim);
                     for (int i = 0; i < dim; i++) { quad_pt_loc[i] = quad_pt[i]; }
                     quad_node_locations.push_back(quad_pt_loc);
-
-                    std::cout << "Quad node location: " << quad_pt_loc[0] << ", " << quad_pt_loc[1] << " Pressure: " << pressure << std::endl;
                 }
             }
         }
@@ -222,10 +220,13 @@ dealii::LinearAlgebra::distributed::Vector<double> ROMSnapshots<dim, nstate>::ge
 
     int num_face_quads_global = 0;
     MPI_Allreduce(&num_face_quads_local, &num_face_quads_global, 1, MPI_INT, MPI_SUM, mpi_communicator);
+
     std::vector<std::vector<double>> cell_pressures_global = 
         dealii::Utilities::MPI::all_gather(mpi_communicator, cell_pressures);
-    dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(num_face_quads_global);
+    std::vector<std::vector<std::vector<double>>> quad_node_locations_global = 
+        dealii::Utilities::MPI::all_gather(mpi_communicator, quad_node_locations);
 
+    dealii::LinearAlgebra::distributed::Vector<double> cell_pressures_dealii(num_face_quads_global);
     int idx = 0;
     for (std::vector<double> pressure_vector_local : cell_pressures_global)
     {
@@ -237,52 +238,38 @@ dealii::LinearAlgebra::distributed::Vector<double> ROMSnapshots<dim, nstate>::ge
     }
     cell_pressures_dealii.update_ghost_values();
 
-    MPI_Barrier(mpi_communicator);
-
-    if (all_parameters->reduced_order_param.save_snapshot_vtk)
+    dealii::LAPACKFullMatrix<double> data_output_matrix(num_face_quads_global, dim + 1);
+    int row = 0;
+    for (unsigned int proc = 0; proc < dealii::Utilities::MPI::n_mpi_processes(mpi_communicator); proc++)
     {
-        std::vector<std::vector<std::vector<double>>> quad_node_locations_global = 
-            dealii::Utilities::MPI::all_gather(mpi_communicator, quad_node_locations);
+        std::vector<double> pressure_vector_local = cell_pressures_global[proc];
+        std::vector<std::vector<double>> quad_node_locations_local = quad_node_locations_global[proc];
 
-        dealii::LAPACKFullMatrix<double> data_output_matrix(num_face_quads_global, dim + 1);
+        if (pressure_vector_local.empty()) { continue; }
 
-        int row = 0;
-        for (unsigned int proc = 0; proc < dealii::Utilities::MPI::n_mpi_processes(mpi_communicator); proc++)
+        for (size_t m = 0; m < pressure_vector_local.size(); m++)
         {
-            std::vector<double> pressure_vector_local = cell_pressures_global[proc];
-            std::vector<std::vector<double>> quad_node_locations_local = quad_node_locations_global[proc];
-
-            if (pressure_vector_local.empty()) { continue; }
-
-            for (size_t m = 0; m < pressure_vector_local.size(); m++)
+            for (int n = 0; n < dim; n++)
             {
-                for (int n = 0; n < dim; n++)
-                {
-                    data_output_matrix.set(row, n, quad_node_locations_local[m][n]);
-                }
-                // data_output_matrix.set(row, dim, pressure_vector_local[m]);
-                ++row;
+                data_output_matrix.set(row, n, quad_node_locations_local[m][n]);
             }
+            // data_output_matrix.set(row, dim, pressure_vector_local[m]);
+            ++row;
         }
-
-        // std::string fn = all_parameters->solution_vtk_files_directory_name + "/" + filename + ".txt";
-        std::string fn = all_parameters->solution_vtk_files_directory_name + "/point_locations.txt";
-        std::ofstream snapshot_data_file(fn);
-        unsigned int precision = 16;
-        data_output_matrix.print_formatted(snapshot_data_file, precision);
-        snapshot_data_file.close();
-        pcout << filename << std::endl;
     }
 
-    flow_solver->dg->output_face_results_vtk(0, 0);
-    flow_solver->dg->output_results_vtk(0, 0);
-    // if (all_parameters->reduced_order_param.save_snapshot_vtk) 
-    // {
-    //     pcout << filename << std::endl;
-    //     pcout << "OUTPUTTING CUSTOM" << std::endl;
-    //     output_surface_solution_vtk(cell_pressures_dealii, flow_solver, mapping, filename);
-    //     pcout << "DONE OUTPUTTING CUSTOM" << std::endl;
-    // }
+    std::string fn = all_parameters->solution_vtk_files_directory_name + "/point_locations.txt";
+    std::ofstream snapshot_data_file(fn);
+    unsigned int precision = 16;
+    data_output_matrix.print_formatted(snapshot_data_file, precision);
+    snapshot_data_file.close();
+
+    if (all_parameters->reduced_order_param.save_snapshot_vtk)
+    {        
+        output_surface_solution_vtk(cell_pressures_dealii, flow_solver, mapping, filename);
+        flow_solver->dg->output_face_results_vtk(0, 0);
+        flow_solver->dg->output_results_vtk(0, 0);
+    }
     return cell_pressures_dealii;
 }
 
@@ -291,7 +278,7 @@ double ROMSnapshots<dim, nstate>::compute_pressure_coeff_at_q(
     const std::array<double ,nstate> &conservative_soln) const
 {
     const double density = conservative_soln[0];
-    const double tot_energy = conservative_soln[nstate-1];
+    // const double tot_energy = conservative_soln[nstate-1];
 
     dealii::Tensor<1, dim, double> vel;
     for (int d = 0; d < dim; d++) { vel[d] = conservative_soln[d+1] / density; }
@@ -302,13 +289,14 @@ double ROMSnapshots<dim, nstate>::compute_pressure_coeff_at_q(
         vel2 = vel2 + vel[d] * vel[d]; 
     }
 
-    double gamm1 = all_parameters->euler_param.gamma_gas - 1.0;
-    double pressure = gamm1 * (tot_energy - 0.5 * density * vel2);    
+    // double gamm1 = all_parameters->euler_param.gamma_gas - 1.0;
+    // double pressure = gamm1 * (tot_energy - 0.5 * density * vel2);    
 
-    double Minf = all_parameters->euler_param.mach_inf;
-    double gamma_gas = all_parameters->euler_param.gamma_gas;
-    double pressure_inf = 1.0 / (gamma_gas * Minf * Minf);
-    double cp = (pressure - pressure_inf) / 0.5 ;
+    // double Minf = all_parameters->euler_param.mach_inf;
+    // double gamma_gas = all_parameters->euler_param.gamma_gas;
+    // double pressure_inf = 1.0 / (gamma_gas * Minf * Minf);
+    // double cp = (pressure - pressure_inf) / 0.5 ;
+    double cp = 1 - vel2;
 
     return cp;
 }
@@ -701,15 +689,15 @@ void ROMSnapshots<dim, nstate>::output_surface_solution_vtk(
     //     dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim-1,dim>::DataVectorType::type_cell_data);
 
     // pcout << "create Postprocess" << std::endl;
-    // const std::unique_ptr< dealii::DataPostprocessor<dim> > post_processor = 
-    //     Postprocess::PostprocessorFactory<dim>::create_Postprocessor(all_parameters);
-    // pcout << "add post process" << std::endl;
-    // data_out.add_data_vector(flow_solver->dg->solution, *post_processor);
+    const std::unique_ptr< dealii::DataPostprocessor<dim> > post_processor = 
+        Postprocess::PostprocessorFactory<dim>::create_Postprocessor(all_parameters);
+    pcout << "add post process" << std::endl;
+    data_out.add_data_vector(flow_solver->dg->solution, *post_processor);
 
     // dealii::Vector<double> pressures_dealii(pressures.begin(), pressures.end());
-    pcout << "add pressures" << std::endl;
-    data_out.add_data_vector(pressures, std::string("Surface Pressure"),
-        dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim-1,dim>::DataVectorType::type_cell_data);
+    // pcout << "add pressures" << std::endl;
+    // data_out.add_data_vector(pressures, std::string("Surface Pressure"),
+    //     dealii::DataOut_DoFData<dealii::DoFHandler<dim>,dim-1,dim>::DataVectorType::type_cell_data);
 
     // const bool write_higher_order_cells = false;//(dim>1 && grid_degree > 1) ? true : false;
     // dealii::DataOutBase::VtkFlags vtkflags(
