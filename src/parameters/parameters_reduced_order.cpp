@@ -45,9 +45,6 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("run_k_fold_cross_validation", "false",
                           dealii::Patterns::Bool(),
                           "Option to run k-fold cross validation.");
-        prm.declare_entry("print_plots", "false",
-                          dealii::Patterns::Bool(),
-                          "Option to print the error loss plots.");
         prm.declare_entry("num_pod_modes", "0",
                           dealii::Patterns::Integer(0, dealii::Patterns::Integer::max_int_value),
                           "Number of POD modes to use, set to 0 to use all modes.");
@@ -114,7 +111,6 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
     prm.enter_subsection("Neural network");
     {
         run_k_fold_cross_validation = prm.get_bool("run_k_fold_cross_validation");
-        print_plots = prm.get_bool("print_plots");
         num_pod_modes = prm.get_integer("num_pod_modes");
         architecture = prm.get_integer("architecture");
         epochs = prm.get_integer("epochs");

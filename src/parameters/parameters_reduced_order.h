@@ -39,7 +39,6 @@ public:
 
     /// Neural network ROM parameters ///
     bool run_k_fold_cross_validation;  ///< Option to run k-fold cross validation
-    bool print_plots;  ///< Option to print the error and training plots
     int num_pod_modes;  ///< Number of POD modes to use
     int architecture;  ///< Neural network architecture to use
     int epochs;  ///< Number of epochs for training

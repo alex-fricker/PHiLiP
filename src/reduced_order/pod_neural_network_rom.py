@@ -47,16 +47,27 @@ class POD:
         else:
             self.num_pod_modes = len(S)
 
-        # I realize this next snipped is dumb but np.dot(A,B) segfaults when called via the A-API for some reason
-        # temp = np.ones((self.num_pod_modes, self.num_pod_modes))
-        # for i in range(temp.shape[1]):
-        #     temp[i, :] = V.T[i, :] * S[i]
+        # I realize this next snippet is dumb but np.diag(S) @ V.T segfaults when called via the A-API for some reason
+        temp = np.ones((self.num_pod_modes, self.num_pod_modes))
+        for i in range(temp.shape[1]):
+            temp[i, :] = V.T[i, :] * S[i]
+
         self.POD_basis = U
-        self.POD_coefficients = np.diag(S) @ V.T
+        # self.POD_coefficients = np.diag(S) @ V.T
+        self.POD_coefficients = temp
         return 0
 
     def inverse(self, coeffs):
-        prediction = (self.POD_basis @ coeffs).reshape(-1, 1) + self.ref_state
+        rows, cols = self.POD_basis.shape
+        prediction = np.ones(self.ref_state.shape)
+        for i in range(rows):
+            value = 0
+            for j in range(cols):
+                value += self.POD_basis[i, j] * coeffs[j]
+            prediction[i, 0] = value
+        prediction = prediction + self.ref_state
+
+        # prediction = (self.POD_basis @ coeffs).reshape(-1, 1) + self.ref_state
         prediction = prediction[self.inverse_sort, 0]
         return prediction
 
@@ -97,37 +108,17 @@ class NeuralNetwork(nn.Module):
             nn.Linear(50, self.outSize))
 
         self.arch2 = nn.Sequential(
-            nn.Linear(2, 500),
+            nn.Linear(2, 75),
             nn.PReLU(),
-            nn.Linear(500, 1000),
+            nn.Linear(75, 75),
             nn.PReLU(),
-            nn.Linear(1000, 1000),
+            nn.Linear(75, 75),
             nn.PReLU(),
-            nn.Linear(1000, 500),
+            nn.Linear(75, 25),
             nn.PReLU(),
-            nn.Linear(500, self.outSize))
+            nn.Linear(25, self.outSize))
 
         self.arch3 = nn.Sequential(
-            nn.Linear(2, 200),
-            nn.PReLU(),
-            nn.Linear(200, 500),
-            nn.PReLU(),
-            nn.Linear(500, 500),
-            nn.PReLU(),
-            nn.Linear(500, self.outSize))
-
-        self.arch4 = nn.Sequential(
-            nn.Linear(2, 75),
-            nn.PReLU(),
-            nn.Linear(75, 75),
-            nn.PReLU(),
-            nn.Linear(75, 75),
-            nn.PReLU(),
-            nn.Linear(75, 25),
-            nn.PReLU(),
-            nn.Linear(25, self.outSize))
-
-        self.arch5 = nn.Sequential(
             nn.Linear(2, 75),
             nn.PReLU(),
             nn.Linear(75, 75),
@@ -136,14 +127,6 @@ class NeuralNetwork(nn.Module):
             nn.PReLU(),
             nn.Linear(25, self.outSize))
 
-        self.arch6 = nn.Sequential(
-            nn.Linear(2, 7),
-            nn.PReLU(),
-            nn.Linear(7, 10),
-            nn.PReLU(),
-            nn.Linear(10, 7),
-            nn.PReLU(),
-            nn.Linear(7, self.outSize))
     def forward(self, x):
         if self.arch == 1:
             x = self.arch1(x)
@@ -151,12 +134,6 @@ class NeuralNetwork(nn.Module):
             x = self.arch2(x)
         elif self.arch == 3:
             x = self.arch3(x)
-        elif self.arch == 4:
-            x = self.arch4(x)
-        elif self.arch == 5:
-            x = self.arch5(x)
-        elif self.arch == 6:
-            x = self.arch6(x)
         return x
 
 
@@ -198,7 +175,6 @@ class PODNeuralNetworkROM:
         self.training_batch_size = training_batch_size
 
     def build_network(self):
-        print('Training neural network...')
         self.network.apply(self.reset_weights)
         dataset = SnapshotDataset(parameters=self.POD.parameters,
                                   targets=self.POD.POD_coefficients,
@@ -210,15 +186,13 @@ class PODNeuralNetworkROM:
         epoch = 1
         while epoch < self.epochs and loss > self.early_stopping_tol:
             training_losses = self.train(train_loader=dataset_loader, training_losses=training_losses)
-            if not epoch % 100:
+            if not epoch % 500:
                 print("\tEpoch number: ", epoch, ", current loss: ", training_losses[-1])
             loss = training_losses[-1]
             epoch += 1
         self.write_data(os.path.join(self.save_path) + "training_losses.txt", np.array(training_losses))
-        print('Done training neural network.')
 
     def evaluate_network(self, test_points_path):
-        print("Evaluating neural network ROM...")
         params_array = self.read_data(test_points_path)
         self.network.eval()
         params_array = self.POD.scaler.transform(params_array.T)
@@ -226,7 +200,6 @@ class PODNeuralNetworkROM:
         rom_solutions = []
 
         for i in range(0, np.size(params_array, axis=1)):
-            print("Test Point: ", i)
             params = tc.from_numpy(params_array[:, i].reshape(-1))
             coefficients = self.network(params.float())
             coefficients = coefficients.cpu().detach().numpy()
@@ -333,15 +306,11 @@ class PODNeuralNetworkROM:
                 layer.reset_parameters()
 
     @staticmethod
-    def visualize_solution(points_locations, parameters, solutions, solution_names):
-        data = []
-        with open(points_locations) as file:
-            for line in file:
-                data.append([float(x) for x in line.strip().split()])
-        file.close()
-        data = np.array(data)
-        for sol_id in range(len(solutions)):
-            data = np.hstack((data, solutions[sol_id]))
+    def visualize_solution(points, parameters, solutions, solution_names):
+        points = points.reshape(solutions.shape[0], -1)
+        data = np.concatenate((points, solutions), axis=1)
+        # for sol_id in range(len(solutions)):
+        #     data = np.hstack((data, solutions[sol_id]))
 
         upper = data[np.argwhere(data[:, 1] > 0).reshape(-1), :]
         upper_sort_args = np.argsort(upper[:, 0])
@@ -352,7 +321,7 @@ class PODNeuralNetworkROM:
         lower = lower[lower_sort_args, :]
 
         # plt.plot(np.append(upper[:, 0], lower[:, 0][::-1]), np.append(upper[:, 1], lower[:, 1][::-1]), label="Airfoil Surface")
-        for sol_id in range(2, 2+len(solutions)):
+        for sol_id in range(2, 2 + solutions.shape[1]):
             # plt.plot(np.append(upper[:, 0], lower[:, 0][::-1]), np.append(upper[:, sol_id], lower[:, sol_id][::-1]), label=solution_names[sol_id-2])
             plt.plot(upper[:, 0], upper[:, sol_id], label=solution_names[sol_id - 2] + "_upper")
             plt.plot(lower[:, 0][::-1], lower[:, sol_id][::-1], label=solution_names[sol_id - 2] + "_lower")
@@ -394,24 +363,24 @@ if __name__ == "__main__":
     #                           + "5_volume_pressure_snapshots_matrix.txt")
 
     snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "20_surface_pressure_snapshots_matrix.txt")
+                      "25_surface_pressure_snapshots_matrix.txt")
     residual_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                      "20_surface_pressure_snapshots_residuals.txt")
+                      "25_surface_pressure_snapshots_residuals.txt")
     parameters_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                       "20_surface_pressure_snapshots_parameters.txt")
+                       "25_surface_pressure_snapshots_parameters.txt")
     testing_points_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/" +
-                           "2_surface_pressure_testing_parameters.txt")
+                           "3_surface_pressure_testing_parameters.txt")
     testing_snapshots_path = ("/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-                              + "2_surface_pressure_testing_matrix.txt")
+                              + "3_surface_pressure_testing_matrix.txt")
     savedir = r"/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/"
-    points = r"/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/point_locations.txt"
+    points_path = r"/home/alex/Codes/PHiLiP/build_release/tests/integration_tests_control_files/reduced_order/point_locations.txt"
 
     num_pod_modes = 0
-    architecture = 1
+    architecture = 3
     learning_rate = 5e-4
     weight_decay = 1e-3
-    epochs = 150
-    training_batch_size = 10
+    epochs = 10000
+    training_batch_size = 25
     early_stop = 1e-5
 
     ROM = PODNeuralNetworkROM(savedir)
@@ -422,17 +391,19 @@ if __name__ == "__main__":
 
     testing_matrix = ROM.read_data(testing_snapshots_path)
     testing_parameters = ROM.read_data(testing_points_path)
+    points = ROM.read_data(points_path)
     rom_solutions = ROM.evaluate_network(testing_points_path)
 
     for i in range(np.size(testing_parameters, axis=1)):
         # params = [testing_parameters[0, i], testing_parameters[1, i]]
         params = testing_parameters[:, i]
-        rom_solution = rom_solutions[i]
-        fom_solution = testing_matrix[:, i]
-        diff = rom_solution.reshape(-1) - testing_matrix[:, i]
+        rom_solution = rom_solutions[:, i].reshape(-1, 1)
+        fom_solution = testing_matrix[:, i].reshape(-1, 1)
+        diff = rom_solution - fom_solution
         L2_error = np.linalg.norm(diff)
         print(f'L2 error for parameters {testing_parameters[:, i]}: {L2_error}')
-
-        ROM.visualize_solution(points, testing_parameters[:, i], [rom_solution, fom_solution.reshape(-1, 1)], ["ROM", "FOM"])
+        ROM.visualize_solution(points, testing_parameters[:, i],
+                               np.concatenate((rom_solution, fom_solution), axis=1),
+                               ["ROM", "FOM"])
 
     print("Done.")

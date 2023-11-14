@@ -8,7 +8,6 @@ set conv_num_flux = roe
 set diss_num_flux = bassi_rebay_2
 set use_split_form = false
 set overintegration = 0
-set solution_vtk_files_directory_name = solver_output_files
 
 subsection artificial dissipation
   set add_artificial_dissipation = true
@@ -17,7 +16,7 @@ end
 subsection euler
   set reference_length = 1.0
   set mach_infinity = 0.50
-  set angle_of_attack = 1.25
+  set angle_of_attack = 0.0
 end
 
 subsection linear solver
@@ -59,31 +58,29 @@ subsection flow_solver
   set steady_state_polynomial_ramping = true
 
   subsection grid
-    set input_mesh_filename  = ../../meshes/naca0012_hopw_ref3
+    set input_mesh_filename  = ../../meshes/naca0012_hopw_ref1
+    #set input_mesh_filename = /home/alex/Codes/PHiLiP/build_release/tests/meshes/naca0012_hopw_ref0
     set number_of_mesh_refinements = 1
   end
 end
 
 subsection reduced order
   set parameter_names = mach, alpha
-  set parameter_min_values = 0.3, 0  # Donovan subsonic 0.3-0.55 and 0-1
+  set parameter_min_values = 0.3, 0    # Donovan subsonic 0.3-0.55 and 0-1, transonic 0.5-0.9 and 0-5
   set parameter_max_values = 0.55, 3
-  # set parameter_min_values = 0.5, 0  # Donovan transonic 0.5-0.9 and 0-5
-  # set parameter_max_values = 0.9, 5
-  set num_halton = 1
-  set save_snapshot_vtk = true
+  set num_halton = 25                  # Number of snapshots to be used to train the neural network
+  set save_snapshot_vtk = false
   set snapshot_type = surface_pressure
 end
 
 subsection Neural network
   set run_k_fold_cross_validation = false
-  set print_plots = true
-  set num_pod_modes = 0  # Setting to 0 uses all of the POD modes
-  set architecture = 1
-  set epochs = 500
-  set learning_rate = 5e-3
-  set training_batch_size = 15
+  set num_pod_modes = 0               # Setting to 0 uses all of the POD modes
+  set architecture = 3
+  set epochs = 10000
+  set learning_rate = 5e-4
+  set training_batch_size = 25
   set testing_batch_size = 2
   set recompute_training_snapshot_matrix = true
-  set num_evaluation_points = 5
+  set num_evaluation_points = 3
 end
