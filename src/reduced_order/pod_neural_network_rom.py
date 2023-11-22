@@ -190,7 +190,7 @@ class PODNeuralNetworkROM:
                 print("\tEpoch number: ", epoch, ", current loss: ", training_losses[-1])
             loss = training_losses[-1]
             epoch += 1
-        self.write_data(os.path.join(self.save_path) + "training_losses.txt", np.array(training_losses))
+        self.write_data(path=os.path.join(self.save_path) + "training_losses.txt", data=np.array(training_losses))
 
     def evaluate_network(self, test_points_path):
         params_array = self.read_data(test_points_path)
@@ -304,30 +304,6 @@ class PODNeuralNetworkROM:
         for layer in network.children():
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
-
-    @staticmethod
-    def visualize_solution(points, parameters, solutions, solution_names):
-        points = points.reshape(solutions.shape[0], -1)
-        data = np.concatenate((points, solutions), axis=1)
-        # for sol_id in range(len(solutions)):
-        #     data = np.hstack((data, solutions[sol_id]))
-
-        upper = data[np.argwhere(data[:, 1] > 0).reshape(-1), :]
-        upper_sort_args = np.argsort(upper[:, 0])
-        upper = upper[upper_sort_args, :]
-
-        lower = data[np.argwhere(data[:, 1] < 0).reshape(-1), :]
-        lower_sort_args = np.argsort(lower[:, 0])
-        lower = lower[lower_sort_args, :]
-
-        # plt.plot(np.append(upper[:, 0], lower[:, 0][::-1]), np.append(upper[:, 1], lower[:, 1][::-1]), label="Airfoil Surface")
-        for sol_id in range(2, 2 + solutions.shape[1]):
-            # plt.plot(np.append(upper[:, 0], lower[:, 0][::-1]), np.append(upper[:, sol_id], lower[:, sol_id][::-1]), label=solution_names[sol_id-2])
-            plt.plot(upper[:, 0], upper[:, sol_id], label=solution_names[sol_id - 2] + "_upper")
-            plt.plot(lower[:, 0][::-1], lower[:, sol_id][::-1], label=solution_names[sol_id - 2] + "_lower")
-        plt.title(f"Mach: {parameters[0]:.3f}, AoA: {np.rad2deg(parameters[1]):.3f} deg")
-        plt.legend()
-        plt.show(figsize=(10, 6))
 
     @staticmethod
     def read_data(path):

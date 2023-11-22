@@ -30,21 +30,22 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("parameter_max_values", "0.7, 4",
                           dealii::Patterns::List(dealii::Patterns::Double(), 0, 10, ","),
                           "Maximum values for parameters");
-        prm.declare_entry("save_snapshot_vtk", "false",
+        prm.declare_entry("save_snapshot", "false",
                           dealii::Patterns::Bool(),
-                          "Option to save the .vtu file for each snapshot in the snapshot matrix.");
+                          "Option to save the .csv/.vkt file for each snapshot in the snapshot matrix.");
         prm.declare_entry("snapshot_type", "surface_pressure",
                           dealii::Patterns::Selection("volume_pressure|surface_pressure|dg_solution"),
                           "Type of data to build the snapshot matrix with.",
                           "Choices are <volume_pressure|surface_pressure|dg_solution>.");
+        prm.declare_entry("snapshot_distribution", "halton",
+                          dealii::Patterns::Selection("halton|linear"),
+                          "Type of point distributions for generating the snapshot matrix.",
+                          "Choices are <halton|linear>.");
     }
     prm.leave_subsection();
 
     prm.enter_subsection("Neural network");
     {
-        prm.declare_entry("run_k_fold_cross_validation", "false",
-                          dealii::Patterns::Bool(),
-                          "Option to run k-fold cross validation.");
         prm.declare_entry("num_pod_modes", "0",
                           dealii::Patterns::Integer(0, dealii::Patterns::Integer::max_int_value),
                           "Number of POD modes to use, set to 0 to use all modes.");
@@ -61,16 +62,10 @@ void ReducedOrderModelParam::declare_parameters (dealii::ParameterHandler &prm)
         prm.declare_entry("training_batch_size", "15",
                           dealii::Patterns::Integer(1, dealii::Patterns::Integer::max_int_value),
                           "Batch size for training the neural network.");
-        prm.declare_entry("testing_batch_size", "2",
-                          dealii::Patterns::Integer(0, dealii::Patterns::Integer::max_int_value),
-                          "Batch size for testing the neural network if doing k-fold cross validation.");
         prm.declare_entry("weight_decay", "1e-3",
                           dealii::Patterns::Double(dealii::Patterns::Double::min_double_value, 
                                                    dealii::Patterns::Double::max_double_value),
                           "Penalty applied to the L2 norm of the weights in the loss function.");
-        prm.declare_entry("num_kf_splits", "5",
-                          dealii::Patterns::Integer(2, dealii::Patterns::Integer::max_int_value),
-                          "Number of splits to make if doing k-fold cross validation.");
         prm.declare_entry("recompute_training_snapshot_matrix", "true",
                           dealii::Patterns::Bool(),
                           "Option to recompute the training snapshot matrix or to use an existing one.");
@@ -103,22 +98,20 @@ void ReducedOrderModelParam::parse_parameters (dealii::ParameterHandler &prm)
         std::unique_ptr<dealii::Patterns::PatternBase> ListPatternMax(new dealii::Patterns::List(dealii::Patterns::Double(), 0, 10, ",")); //Note, in a future version of dealii, this may change from a unique_ptr to simply the object. Will need to use std::move(ListPattern) in next line.
         parameter_max_values = dealii::Patterns::Tools::Convert<decltype(parameter_max_values)>::to_value(parameter_max_string, ListPatternMax);
     
-        save_snapshot_vtk = prm.get_bool("save_snapshot_vtk");
+        save_snapshot = prm.get_bool("save_snapshot");
         snapshot_type = prm.get("snapshot_type");
+        snapshot_distribution = prm.get("snapshot_distribution");
     }
     prm.leave_subsection();
 
     prm.enter_subsection("Neural network");
     {
-        run_k_fold_cross_validation = prm.get_bool("run_k_fold_cross_validation");
         num_pod_modes = prm.get_integer("num_pod_modes");
         architecture = prm.get_integer("architecture");
         epochs = prm.get_integer("epochs");
         learning_rate = prm.get_double("learning_rate");
         training_batch_size = prm.get_integer("training_batch_size");
-        testing_batch_size = prm.get_integer("testing_batch_size");
         weight_decay = prm.get_double("weight_decay");
-        num_kf_splits = prm.get_integer("num_kf_splits");
         recompute_training_snapshot_matrix = prm.get_bool("recompute_training_snapshot_matrix");
         num_evaluation_points = prm.get_integer("num_evaluation_points");
     }

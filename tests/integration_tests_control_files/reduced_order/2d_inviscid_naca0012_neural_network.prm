@@ -65,22 +65,20 @@ subsection flow_solver
 end
 
 subsection reduced order
+  set num_halton = 5                   # Number of snapshots to be used to train the neural network
   set parameter_names = mach, alpha
   set parameter_min_values = 0.3, 0    # Donovan subsonic 0.3-0.55 and 0-1, transonic 0.5-0.9 and 0-5
   set parameter_max_values = 0.55, 3
-  set num_halton = 25                  # Number of snapshots to be used to train the neural network
-  set save_snapshot_vtk = false
-  set snapshot_type = surface_pressure
+  set save_snapshot = true
+  set snapshot_type = volume_pressure
 end
 
 subsection Neural network
-  set run_k_fold_cross_validation = false
-  set num_pod_modes = 0               # Setting to 0 uses all of the POD modes
-  set architecture = 3
+  set num_evaluation_points = 3
+  set training_batch_size = 10
   set epochs = 10000
   set learning_rate = 5e-4
-  set training_batch_size = 25
-  set testing_batch_size = 2
-  set recompute_training_snapshot_matrix = true
-  set num_evaluation_points = 3
+  set architecture = 3
+  set num_pod_modes = 0               # Setting to 0 uses all of the POD modes
+  set recompute_training_snapshot_matrix = false
 end

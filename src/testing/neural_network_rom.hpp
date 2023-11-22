@@ -25,6 +25,12 @@ private:
     const dealii::ParameterHandler &parameter_handler;  ///< Parameter handler for storing the .prm file being ran
     Eigen::MatrixXd testing_parameters;  ///< Parameters for testing the network
     Eigen::MatrixXd testing_snapshots;  ///< Snapshot for testing the network
+
+    /// Outputs the ROM solution to a csv file to view in paraview
+    void output_nnrom_solution_to_csv(
+        const Eigen::MatrixXd &rom_solutions,
+        const Eigen::MatrixXd &eval_parameters, 
+        const PHiLiP::Parameters::AllParameters *const all_parameters) const;
 };
 
 }  ///< Tests namespace

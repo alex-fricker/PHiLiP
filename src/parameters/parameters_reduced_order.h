@@ -34,22 +34,20 @@ public:
     /// Maximum value of parameters
     std::vector<double> parameter_max_values;
 
-    /// Save the vtu file of each snapshot when using ROMSnapshots::build_snapshot_matrix()
-    bool save_snapshot_vtk;
+    /// Save the csv/vkt file (depends on snapshot type) of each snapshot
+    bool save_snapshot;
 
     /// Neural network ROM parameters ///
-    bool run_k_fold_cross_validation;  ///< Option to run k-fold cross validation
     int num_pod_modes;  ///< Number of POD modes to use
     int architecture;  ///< Neural network architecture to use
     int epochs;  ///< Number of epochs for training
     double learning_rate;  ///< Learning rate for training
     int training_batch_size;  ///< Batch size for training
-    int testing_batch_size;  ///< Batch size for testing if doing k-fold cross validation
     double weight_decay;  ///< Adds a penalty to the L2 norm of the weights in the loss function
-    int num_kf_splits;  ///< Number of split if doing k-fold cross validation
     bool recompute_training_snapshot_matrix;  ///< Recompute or use existing training matrix
     int num_evaluation_points;  ///< Number of points to test the rom at
     std::string snapshot_type;   ///< Type of data to build the snapshot matrix with
+    std::string snapshot_distribution;   ///< Distribution of points for snapshot generation  
 
     /// Declares the possible variables and sets the defaults.
     static void declare_parameters (dealii::ParameterHandler &prm);
