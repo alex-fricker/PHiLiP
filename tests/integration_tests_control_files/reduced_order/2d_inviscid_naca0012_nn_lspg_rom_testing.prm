@@ -1,7 +1,7 @@
 # Listing of Parameters
 # ---------------------
 
-set test_type = neural_network_rom
+set test_type = nn_lspg_rom_testing
 set dimension = 2
 set pde_type  = euler
 set conv_num_flux = roe
@@ -64,20 +64,19 @@ subsection flow_solver
 end
 
 subsection reduced order
-  set num_halton = 10                   # Number of snapshots to be used to train the neural network
+  set num_halton =  8                # Number of snapshots to be used to train the neural network
   set parameter_names = mach, alpha
   set parameter_min_values = 0.3, 0    # Donovan subsonic 0.3-0.55 and 0-1, transonic 0.5-0.9 and 0-5
   set parameter_max_values = 0.55, 3
-  set save_snapshot = true
   set snapshot_type = surface_pressure
+  set save_snapshot = true
 end
 
 subsection Neural network
-  set num_evaluation_points = 1
+  set num_evaluation_points = 5
   set training_batch_size = 10
   set epochs = 10000
   set learning_rate = 5e-4
   set architecture = 3
   set num_pod_modes = 0               # Setting to 0 uses all of the POD modes
-  set recompute_training_snapshot_matrix = false
 end

@@ -44,7 +44,7 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
     if (all_parameters->reduced_order_param.recompute_training_snapshot_matrix)
     {
         // Generate the snapshot matrix to train the neural network
-        snapshot_matrix.build_snapshot_matrix(all_parameters->reduced_order_param.num_halton);
+        snapshot_matrix.build_snapshot_matrix(all_parameters->reduced_order_param.num_halton, false, true);
         training_pathnames = snapshot_matrix.write_snapshot_data_to_file(training_savename);
     } 
     else
@@ -57,15 +57,13 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
     std::string testing_savename = std::to_string(all_parameters->reduced_order_param.num_evaluation_points) +
         "_" + all_parameters->reduced_order_param.snapshot_type + "_testing";
 
-    ProperOrthogonalDecomposition::ROMSnapshots<dim, nstate> testing_matrix(
-        all_parameters, 
-        parameter_handler);
-    testing_matrix.build_snapshot_matrix(num_eval_points);
+    ProperOrthogonalDecomposition::ROMSnapshots<dim, nstate> testing_matrix(all_parameters, parameter_handler);
+    testing_matrix.build_snapshot_matrix(num_eval_points, false, false);
     std::vector<std::string> testing_pathnames = testing_matrix.write_snapshot_data_to_file(testing_savename);
     // std::vector<std::string> testing_pathnames = testing_matrix.get_pathnames(testing_savename);
 
     // Embedding the python code from pod_neural_network_rom.py
-    this->pcout << "\n\nInitializing neural network ROM" << std::endl;
+    this->pcout << "\nInitializing neural network ROM" << std::endl;
     Py_Initialize();
     PyRun_SimpleString("import sys");
     PyRun_SimpleString("sys.path.append(\".\")");
@@ -163,17 +161,17 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
 
     // Evaluate the neural network
     result = PyObject_CallMethod(nnrom_instance, "evaluate_network", "(s)", testing_pathnames[1].c_str());
- 
-    Py_XDECREF(result);
-    Py_XDECREF(nnrom_instance);
-    Py_Finalize(); 
-
-    std::string filename = all_parameters->solution_vtk_files_directory_name + "/pod_nnrom_solution.txt";
-    if(!std::filesystem::exists(filename))
+    if (result == nullptr)
     {
-        this->pcout << "Neural network ROM solution file does not exist." << std::endl;
+        this->pcout << "Failed to evaulate the neural network." << std::endl;
+        PyErr_Print();
         return 1;
     }
+    this->pcout << "Done evaluating the neural network." << std::endl; 
+    MPI_Barrier(mpi_communicator);
+
+    Py_XDECREF(result);
+    Py_XDECREF(nnrom_instance);
 
     std::ifstream rom_file(all_parameters->solution_vtk_files_directory_name + "/pod_nnrom_solution.txt");
     if(!rom_file.is_open())
@@ -182,7 +180,7 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
         return 1;        
     }
     
-    int solution_size = testing_matrix.pod->snapshotMatrix.rows();
+    int solution_size = all_parameters->reduced_order_param.num_evaluation_points;
     Eigen::MatrixXd rom_solutions(solution_size, num_eval_points);
 
     std::string line;
@@ -200,6 +198,11 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
         ++i;
     }
 
+    if (all_parameters->reduced_order_param.save_snapshot)
+    {
+        output_nnrom_solution_to_csv(rom_solutions, testing_matrix.snapshot_points, all_parameters);
+    }
+
     double solution_error_tol = 1e3;
     bool test_fail = false;
     for (int i = 0; i < num_eval_points; ++i)
@@ -214,7 +217,59 @@ int NeuralNetworkROM<dim, nstate>::run_test() const
 
     }
 
+    Py_Finalize();
     return test_fail;
+}
+
+template <int dim, int nstate>
+void NeuralNetworkROM<dim, nstate>::output_nnrom_solution_to_csv(
+    const Eigen::MatrixXd &rom_solutions,
+    const Eigen::MatrixXd &eval_parameters, 
+    const PHiLiP::Parameters::AllParameters *const all_parameters) const
+{
+    std::ifstream points_file(all_parameters->solution_vtk_files_directory_name + "/point_locations.txt");
+    if(!points_file.is_open())
+    {
+        this->pcout << "Failed to open point locations file." << std::endl;        
+    }
+    else
+    {
+        Eigen::MatrixXd out_matrix(rom_solutions.rows(), dim+1);
+
+        std::string line;
+        int i = 0;
+        while (std::getline(points_file, line))
+        {
+            int j = 0;
+            std::istringstream iss(line);
+            double value;
+            while (iss >> value)
+            {
+                out_matrix(i, j) = value;
+                ++j;
+            }
+            ++i;
+        }
+
+        const double pi = atan(1.0) * 4.0;
+        const static Eigen::IOFormat csv_format(Eigen::FullPrecision, Eigen::DontAlignCols, ",", "\n");
+        for (unsigned int i = 0; i < rom_solutions.cols(); i++)
+        {
+            double AoA = eval_parameters(1, i) * 180 / pi;
+            std::string fn = all_parameters->solution_vtk_files_directory_name + "/mach_" 
+            + std::to_string(eval_parameters(0, i)) + "_aoa_" + std::to_string(AoA) + "_rom_" 
+            + all_parameters->reduced_order_param.snapshot_type + "_solution.csv";
+
+            out_matrix.col(out_matrix.cols()-1) = rom_solutions.col(i);
+            std::ofstream solution_out(fn);
+            if (solution_out.is_open())
+            {
+                solution_out << out_matrix.format(csv_format);
+                solution_out.close();
+            }
+        }
+    }
+    
 }
 
 #if PHILIP_DIM==1

@@ -208,8 +208,6 @@ class PODNeuralNetworkROM:
 
         rom_solutions = np.concatenate(rom_solutions, axis=1)
         filename = os.path.join(self.save_path, f"pod_nnrom_solution.txt")
-        if os.path.exists(filename):
-            os.remove(filename)
         self.write_data(filename, rom_solutions)
         return rom_solutions
 
